@@ -114,6 +114,34 @@
   .modal-btn { flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; }
   .modal-btn.cancel { background: var(--surface2); color: var(--muted); }
   .modal-btn.confirm { background: var(--accent); color: #0f0f0f; }
+
+  /* Export button */
+  .export-btn { width: 100%; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 14px; padding: 14px; font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 10px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .export-btn:active { background: rgba(201,240,110,0.1); }
+  .export-btn svg { width: 16px; height: 16px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Export modal */
+  .export-modal-content { text-align: center; padding: 8px 0 4px; }
+  .export-modal-icon { font-size: 36px; margin-bottom: 12px; }
+  .export-modal-title { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 8px; }
+  .export-modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+  .export-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .export-option-btn { width: 100%; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; display: flex; align-items: center; gap: 10px; }
+  .export-option-btn.csv { background: var(--accent); color: #0f0f0f; }
+  .export-option-btn.csv svg { stroke: #0f0f0f; }
+  .export-option-btn.copy { background: var(--surface2); color: var(--text); }
+  .export-option-btn.copy svg { stroke: var(--text); }
+  .export-option-btn svg { width: 18px; height: 18px; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .skip-btn { width: 100%; padding: 12px; background: transparent; border: none; color: var(--muted); font-size: 14px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+
+  /* Edit categories */
+  .cat-manage-btn { width: 100%; background: transparent; color: var(--muted); border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px; padding: 10px; font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 8px; }
+  .cat-edit-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 320px; overflow-y: auto; }
+  .cat-edit-item { display: flex; align-items: center; gap: 8px; background: var(--surface2); border-radius: 10px; padding: 8px 10px; }
+  .cat-edit-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .cat-edit-input { flex: 1; background: transparent; border: none; font-size: 14px; color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; padding: 2px 0; border-bottom: 1px solid transparent; transition: border-color 0.2s; }
+  .cat-edit-input:focus { border-bottom-color: var(--accent); }
+  .cat-edit-delete { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,107,107,0.15); border: none; color: var(--danger); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -144,9 +172,14 @@
       <div class="field">
         <label>Category</label>
         <div class="cat-grid" id="cat-grid"></div>
+        <button class="cat-manage-btn" onclick="openManageCatsModal()">Manage categories (edit / delete)</button>
       </div>
 
       <button class="submit-btn" onclick="saveExpense()">Save Expense</button>
+      <button class="export-btn" onclick="openExportModal(false)">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export all data
+      </button>
     </div>
 
     <!-- DASHBOARD VIEW -->
@@ -155,6 +188,9 @@
         <div class="month-nav-btn" onclick="changeMonth(-1)">‹</div>
         <div class="month-title" id="month-label">May 2026</div>
         <div class="month-nav-btn" onclick="changeMonth(1)">›</div>
+        <div class="month-nav-btn" style="background:transparent;border-color:var(--accent);" onclick="openExportModal(false)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
       </div>
 
       <div id="dash-content"></div>
@@ -179,6 +215,38 @@
 </div>
 
 <div id="toast"></div>
+
+<div class="modal-bg" id="export-modal">
+  <div class="modal">
+    <div class="export-modal-content">
+      <div class="export-modal-icon">📊</div>
+      <div class="export-modal-title">Export your data</div>
+      <div class="export-modal-sub" id="export-modal-sub">Save a backup of all your expenses as a CSV file you can open in Excel or Numbers.</div>
+    </div>
+    <div class="export-options">
+      <button class="export-option-btn csv" onclick="exportCSV()">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        Download CSV (Excel / Numbers)
+      </button>
+      <button class="export-option-btn copy" onclick="copyToClipboard()">
+        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Copy to clipboard
+      </button>
+    </div>
+    <button class="skip-btn" id="export-skip-btn" onclick="closeExportModal()">Skip for now</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="manage-cats-modal">
+  <div class="modal">
+    <div class="modal-title">Manage categories</div>
+    <div class="cat-edit-list" id="cat-edit-list"></div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeManageCatsModal()">Cancel</button>
+      <button class="modal-btn confirm" onclick="saveManageCats()">Save changes</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-bg" id="cat-modal">
   <div class="modal">
@@ -235,6 +303,75 @@ function renderCatGrid() {
 function openCatModal() {
   document.getElementById('cat-modal').classList.add('open');
   setTimeout(() => document.getElementById('new-cat-input').focus(), 300);
+}
+
+function openManageCatsModal() {
+  const cats = getCats();
+  const list = document.getElementById('cat-edit-list');
+  list.innerHTML = '';
+  cats.forEach((c, i) => {
+    const color = CAT_COLORS[i % CAT_COLORS.length];
+    const item = document.createElement('div');
+    item.className = 'cat-edit-item';
+    item.dataset.index = i;
+    item.innerHTML = `
+      <span class="cat-edit-dot" style="background:${color}"></span>
+      <input class="cat-edit-input" type="text" value="${c}" maxlength="20" data-original="${c}">
+      <button class="cat-edit-delete" onclick="deleteCatItem(this)" title="Delete">✕</button>`;
+    list.appendChild(item);
+  });
+  document.getElementById('manage-cats-modal').classList.add('open');
+}
+
+function deleteCatItem(btn) {
+  const item = btn.closest('.cat-edit-item');
+  const original = item.querySelector('.cat-edit-input').dataset.original;
+  const d = getData();
+  const usedInExpenses = d.expenses && d.expenses.some(e => e.cat === original);
+  if (usedInExpenses) {
+    showToast('Cannot delete — used in existing expenses');
+    return;
+  }
+  item.style.opacity = '0.3';
+  item.style.pointerEvents = 'none';
+  item.dataset.deleted = 'true';
+}
+
+function closeManageCatsModal() {
+  document.getElementById('manage-cats-modal').classList.remove('open');
+}
+
+function saveManageCats() {
+  const items = document.querySelectorAll('#cat-edit-list .cat-edit-item');
+  const newCats = [];
+  let hasEmpty = false;
+  let hasDuplicate = false;
+  items.forEach(item => {
+    if (item.dataset.deleted === 'true') return;
+    const val = item.querySelector('.cat-edit-input').value.trim();
+    if (!val) { hasEmpty = true; return; }
+    if (newCats.includes(val)) { hasDuplicate = true; return; }
+    newCats.push(val);
+  });
+  if (hasEmpty) { showToast('Category name cannot be empty'); return; }
+  if (hasDuplicate) { showToast('Duplicate category names found'); return; }
+  if (newCats.length === 0) { showToast('Must have at least one category'); return; }
+  const d = getData();
+  const oldCats = d.cats || [];
+  items.forEach(item => {
+    if (item.dataset.deleted === 'true') return;
+    const original = item.querySelector('.cat-edit-input').dataset.original;
+    const newVal = item.querySelector('.cat-edit-input').value.trim();
+    if (original !== newVal && d.expenses) {
+      d.expenses.forEach(e => { if (e.cat === original) e.cat = newVal; });
+    }
+  });
+  d.cats = newCats;
+  saveData(d);
+  if (selectedCat && !newCats.includes(selectedCat)) selectedCat = null;
+  closeManageCatsModal();
+  renderCatGrid();
+  showToast('Categories updated!');
 }
 function closeCatModal() {
   document.getElementById('cat-modal').classList.remove('open');
@@ -293,6 +430,74 @@ function saveExpense() {
   selectedCat = null;
   renderCatGrid();
   showToast('Expense saved!');
+  setTimeout(() => openExportModal(true), 800);
+}
+
+function buildCSV() {
+  const d = getData();
+  if (!d.expenses || d.expenses.length === 0) return null;
+  const sorted = [...d.expenses].sort((a,b) => new Date(a.date)-new Date(b.date));
+  let csv = 'Date,Amount (SGD),Merchant,Category\n';
+  sorted.forEach(e => {
+    const dateStr = new Date(e.date).toLocaleDateString('en-SG', {day:'2-digit', month:'short', year:'numeric'});
+    csv += `${dateStr},${e.amount.toFixed(2)},"${e.merchant}","${e.cat}"\n`;
+  });
+  return csv;
+}
+
+function openExportModal(afterSave) {
+  const d = getData();
+  if (!d.expenses || d.expenses.length === 0) { showToast('No expenses to export yet'); return; }
+  const sub = document.getElementById('export-modal-sub');
+  const skipBtn = document.getElementById('export-skip-btn');
+  if (afterSave) {
+    sub.textContent = 'Expense saved! Would you like to export a backup of all your data now?';
+    skipBtn.textContent = 'Skip for now';
+  } else {
+    sub.textContent = `Export all ${d.expenses.length} expenses as a CSV file you can open in Excel or Numbers.`;
+    skipBtn.textContent = 'Cancel';
+  }
+  document.getElementById('export-modal').classList.add('open');
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').classList.remove('open');
+}
+
+function exportCSV() {
+  const csv = buildCSV();
+  if (!csv) { showToast('No data to export'); return; }
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const filename = `expenses_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  closeExportModal();
+  showToast('CSV downloaded!');
+}
+
+function copyToClipboard() {
+  const csv = buildCSV();
+  if (!csv) { showToast('No data to export'); return; }
+  navigator.clipboard.writeText(csv).then(() => {
+    closeExportModal();
+    showToast('Copied to clipboard!');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = csv;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    closeExportModal();
+    showToast('Copied to clipboard!');
+  });
 }
 
 function showToast(msg) {
