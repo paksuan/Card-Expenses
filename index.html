@@ -337,7 +337,7 @@ async function handleReceiptImage(event) {
     const mediaType = file.type || 'image/jpeg';
     const cats = getCats();
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://receipt-proxy.paksuan.workers.dev/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
