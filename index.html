@@ -197,7 +197,10 @@
         <button class="cat-manage-btn" onclick="openManageCatsModal()">Manage categories (edit / delete)</button>
       </div>
 
-      <button class="submit-btn" onclick="saveExpense()">Save Expense</button>
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button class="submit-btn" style="margin-top:0;" onclick="saveExpense()">Save Expense</button>
+        <button class="submit-btn" style="margin-top:0; background:var(--surface2); color:var(--muted); border:1px solid var(--border); flex:0 0 auto; width:auto; padding:16px 20px;" onclick="clearForm()">Clear</button>
+      </div>
       <button class="export-btn" onclick="openExportModal(false)">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Export all data
@@ -539,6 +542,20 @@ amountInput.addEventListener('input', () => {
 function setToday() {
   const d = new Date();
   document.getElementById('date').value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ── CLEAR FORM ────────────────────────────────────────────────
+function clearForm() {
+  amountInput.value = '';
+  amountDisplay.textContent = '$0.00';
+  amountDisplay.classList.add('placeholder');
+  document.getElementById('merchant').value = '';
+  document.querySelectorAll('.ai-filled').forEach(el => el.classList.remove('ai-filled'));
+  clearReceipt();
+  setToday();
+  selectedCat = null;
+  renderCatGrid();
+  showToast('Form cleared');
 }
 
 // ── SAVE ──────────────────────────────────────────────────────
