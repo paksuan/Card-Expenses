@@ -164,6 +164,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .cat-edit-input { flex: 1; background: transparent; border: none; font-size: 14px; color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; padding: 2px 0; border-bottom: 1px solid transparent; transition: border-color 0.2s; }
 .cat-edit-input:focus { border-bottom-color: var(--accent); }
 .cat-edit-delete { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,107,107,0.15); border: none; color: var(--danger); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.export-prompt-banner { background: rgba(201,240,110,0.08); border: 1px solid rgba(201,240,110,0.35); border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.export-prompt-btn { background: var(--accent); color: #0f0f0f; border: none; border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -684,12 +686,12 @@ document.getElementById('export-skip-btn').textContent = afterSave ? 'Skip for n
 document.getElementById('export-modal').classList.add('open');
 }
 function closeExportModal() { document.getElementById('export-modal').classList.remove('open'); }
-function exportCSV() {
+async function exportCSV() {
 const csv = buildCSV(); if (!csv) { showToast('No data to export'); return; }
-const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }), url = URL.createObjectURL(blob), a = document.createElement('a'), now = new Date();
-a.href = url; a.download = `expenses_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
-document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-closeExportModal(); showToast('CSV downloaded!');
+const now = new Date();
+const filename = `expenses_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
+await shareOrDownloadCSV(filename, csv);
+closeExportModal(); showToast('CSV exported!');
 }
 function copyToClipboard() {
 const csv = buildCSV(); if (!csv) { showToast('No data to export'); return; }
@@ -718,33 +720,49 @@ csv += `${dateStr},${e.amount.toFixed(2)},${merchant},${cat}\n`;
 return { csv, count: exps.length };
 }
 
-function downloadCSV(filename, content) {
+// Core share/download — uses iOS native share sheet when available (required
+// for PWA home-screen mode); falls back to anchor-click for desktop.
+async function shareOrDownloadCSV(filename, content) {
 const blob = new Blob([content], { type: 'text/csv' });
+const file = new File([blob], filename, { type: 'text/csv' });
+if (navigator.canShare && navigator.canShare({ files: [file] })) {
+try {
+await navigator.share({ files: [file], title: filename });
+return true;
+} catch(e) {
+if (e.name === 'AbortError') return false; // user cancelled
+// share failed — fall through to anchor
+}
+}
+// Fallback: anchor download (works in desktop browsers)
 const url = URL.createObjectURL(blob);
 const a = document.createElement('a');
 a.href = url; a.download = filename;
 document.body.appendChild(a); a.click(); document.body.removeChild(a);
 setTimeout(() => URL.revokeObjectURL(url), 1000);
+return true;
 }
 
-// Returns true if a file was actually downloaded
+// Returns true if there were expenses; false if month is empty
 function exportMonthCSV(y, m) {
 const { csv, count } = csvForMonth(y, m);
 if (count === 0) return false;
 const filename = `expenses_${MONTH_ABBR[m]}${y}.csv`;
-downloadCSV(filename, csv);
+shareOrDownloadCSV(filename, csv); // fire-and-forget when called with gesture
 return true;
 }
 
-function manualExportCurrentMonth() {
-const ok = exportMonthCSV(dashMonth.getFullYear(), dashMonth.getMonth());
-showToast(ok ? 'CSV downloaded' : 'No expenses to export for this month');
+async function manualExportCurrentMonth() {
+const y = dashMonth.getFullYear(), m = dashMonth.getMonth();
+const { csv, count } = csvForMonth(y, m);
+if (count === 0) { showToast('No expenses to export for this month'); return; }
+const filename = `expenses_${MONTH_ABBR[m]}${y}.csv`;
+const ok = await shareOrDownloadCSV(filename, csv);
+if (ok) showToast('CSV exported — save it to iCloud Drive/Downloads');
 }
 
-// Auto-export on/after the 3rd of the month: exports the PREVIOUS month's
-// data once it's reached the 3rd, so the month is "closed" and unlikely
-// to receive more backdated entries. Tracked via a localStorage flag
-// keyed by "YYYY-MM" so it only fires once per month.
+// Auto-export on/after the 3rd: shows a banner (requires a tap for the iOS
+// share sheet to work — can't trigger file share without a user gesture).
 function checkAutoExport() {
 const today = new Date();
 if (today.getDate() < 3) return;
@@ -754,11 +772,38 @@ const key = `${py}-${pad2(pm + 1)}`;
 const d = getData();
 d.autoExported = d.autoExported || {};
 if (d.autoExported[key]) return;
-const exported = exportMonthCSV(py, pm);
-if (exported) {
+const { count } = csvForMonth(py, pm);
+if (count === 0) return;
+showExportPrompt(py, pm, key);
+}
+
+function showExportPrompt(py, pm, key) {
+if (document.getElementById('auto-export-banner')) return;
+const banner = document.createElement('div');
+banner.id = 'auto-export-banner';
+banner.className = 'export-prompt-banner';
+banner.innerHTML = `
+<div>
+<div style="font-size:13px;font-weight:500;color:var(--accent);">📤 ${MONTH_ABBR[pm]} ${py} ready to export</div>
+<div style="font-size:11px;color:var(--muted);margin-top:2px;">Tap Export, then Save to Files → iCloud Drive/Downloads</div>
+</div>
+<button class="export-prompt-btn" onclick="doAutoExport(${py},${pm},'${key}')">Export</button>`;
+const addView = document.getElementById('view-add');
+addView.insertBefore(banner, addView.firstChild);
+}
+
+async function doAutoExport(py, pm, key) {
+const { csv, count } = csvForMonth(py, pm);
+if (count === 0) return;
+const filename = `expenses_${MONTH_ABBR[pm]}${py}.csv`;
+const ok = await shareOrDownloadCSV(filename, csv);
+if (ok) {
+const d = getData();
+d.autoExported = d.autoExported || {};
 d.autoExported[key] = true;
 saveData(d);
-showToast(`Auto-exported ${MONTH_ABBR[pm]} ${py} CSV — save it to your import folder`);
+document.getElementById('auto-export-banner')?.remove();
+showToast('Exported! Save to iCloud Drive/Downloads when prompted');
 }
 }
 
@@ -870,39 +915,4 @@ const sortedCats = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
 let html = `<div class="total-card">
 <div><div class="total-label">Total spent</div><div class="total-amount">$${total.toFixed(2)}</div></div>
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-<div style="text-align:right;font-size:12px;color:var(--muted);">${exps.length} transactions</div>
-<button onclick="openSummaryModal()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif;">📋 Summary</button>
-</div>
-</div>`;
-
-html += `<div class="section-title">By category</div>`;
-sortedCats.forEach(([cat,amt]) => {
-const idx = cats.indexOf(cat), color = CAT_COLORS[idx>=0?idx%CAT_COLORS.length:0];
-const pct = Math.round((amt/maxCat)*100), sharePct = Math.round((amt/total)*100);
-html += `<div class="cat-bar-item"><div class="cat-bar-top"><div class="cat-bar-name"><span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;"></span>${cat}</div><div class="cat-bar-amount">$${amt.toFixed(2)} <span style="font-size:11px;color:var(--muted);">${sharePct}%</span></div></div><div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%;background:${color};"></div></div></div>`;
-});
-
-html += `<div class="section-title" style="margin-top:24px;">Transactions</div><div class="tx-list">`;
-[...exps].sort((a,b) => new Date(b.date)-new Date(a.date)).forEach(e => {
-const idx = cats.indexOf(e.cat), color = CAT_COLORS[idx>=0?idx%CAT_COLORS.length:0];
-const dateStr = new Date(e.date).toLocaleDateString('en-SG',{day:'numeric',month:'short'});
-html += `<div class="tx-item">
-<div class="tx-left"><div class="tx-dot" style="background:${color}"></div>
-<div><div class="tx-name">${e.merchant}</div><div class="tx-meta">${dateStr} · ${e.cat}</div></div></div>
-<div style="display:flex;align-items:center;gap:6px;">
-<div class="tx-amount">$${e.amount.toFixed(2)}</div>
-<div class="tx-edit" onclick="editExpense(${e.id})">✏️</div>
-<div class="tx-delete" onclick="deleteExpense(${e.id})">✕</div>
-</div>
-</div>`;
-});
-html += `</div>`;
-container.innerHTML = html;
-}
-function deleteExpense(id) { const d = getData(); d.expenses = d.expenses.filter(e => e.id!==id); saveData(d); renderDash(); }
-
-// Init
-setToday(); renderCatGrid(); checkAutoExport();
-</script>
-</body>
-</html>
+<div style="text-align:right;font-size:12px;color:var(--muted);">${exps.le
