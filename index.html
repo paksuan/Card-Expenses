@@ -915,4 +915,49 @@ const sortedCats = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
 let html = `<div class="total-card">
 <div><div class="total-label">Total spent</div><div class="total-amount">$${total.toFixed(2)}</div></div>
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-<div style="text-align:right;font-size:12px;color:var(--muted);">${exps.le
+<div style="text-align:right;font-size:12px;color:var(--muted);">${exps.length} transactions</div>
+<button onclick="openSummaryModal()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif;">📋 Summary</button>
+</div>
+</div>`;
+
+html += `<div class="section-title">By category</div>`;
+sortedCats.forEach(([cat,amt]) => {
+const idx = cats.indexOf(cat), color = CAT_COLORS[idx>=0?idx%CAT_COLORS.length:0];
+const pct = Math.round((amt/maxCat)*100), sharePct = Math.round((amt/total)*100);
+html += `<div class="cat-bar-item"><div class="cat-bar-top"><div class="cat-bar-name"><span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;"></span>${cat}</div><div class="cat-bar-amount">$${amt.toFixed(2)} <span style="font-size:11px;color:var(--muted);">${sharePct}%</span></div></div><div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%;background:${color};"></div></div></div>`;
+});
+
+html += `<div class="section-title" style="margin-top:24px;">Transactions</div><div class="tx-list">`;
+[...exps].sort((a,b) => new Date(b.date)-new Date(a.date)).forEach(e => {
+const idx = cats.indexOf(e.cat), color = CAT_COLORS[idx>=0?idx%CAT_COLORS.length:0];
+const dateStr = new Date(e.date).toLocaleDateString('en-SG',{day:'numeric',month:'short'});
+html += `<div class="tx-item">
+<div class="tx-left"><div class="tx-dot" style="background:${color}"></div>
+<div><div class="tx-name">${e.merchant}</div><div class="tx-meta">${dateStr} · ${e.cat}</div></div></div>
+<div style="display:flex;align-items:center;gap:6px;">
+<div class="tx-amount">$${e.amount.toFixed(2)}</div>
+<div class="tx-edit" onclick="editExpense(${e.id})">✏️</div>
+<div class="tx-delete" onclick="deleteExpense(${e.id})">✕</div>
+</div>
+</div>`;
+});
+html += `</div>`;
+container.innerHTML = html;
+}
+function deleteExpense(id) { const d = getData(); d.expenses = d.expenses.filter(e => e.id!==id); saveData(d); renderDash(); }
+
+// Init
+// One-time migration v2: previous export attempts used the anchor-click
+// method which silently fails in iOS PWA mode. Clear the flags once so the
+// share-sheet prompt re-appears for any month not yet successfully exported.
+(function migrateExportFlags() {
+const d = getData();
+if (d._exportMigration >= 2) return; // already done
+d.autoExported = {};
+d._exportMigration = 2;
+saveData(d);
+})();
+setToday(); renderCatGrid(); checkAutoExport();
+</script>
+</body>
+</html>
