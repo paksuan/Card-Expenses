@@ -486,8 +486,8 @@ async function handleReceiptImage(event) {
   document.getElementById('scan-overlay').classList.add('open');
   try {
     const base64 = await fileToBase64(file);
-    showToast('Image compressed OK, sending...');
-    await new Promise(r => setTimeout(r, 1500));
+    showToast('Base64 done, length: ' + base64.length);
+    await new Promise(r => setTimeout(r, 2000));
     let response, data;
     try {
       response = await fetch(RECEIPT_API, {
