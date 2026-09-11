@@ -30,6 +30,16 @@
   .page-title { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); margin-bottom: 4px; }
   .page-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
 
+  /* Sync status */
+  .sync-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .sync-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sync-dot.ok { background: var(--accent); }
+  .sync-dot.syncing { background: var(--warn); animation: pulse 1s infinite; }
+  .sync-dot.error { background: var(--danger); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .sync-text { font-size: 11px; color: var(--muted); flex: 1; }
+  .sync-refresh { font-size: 11px; color: var(--accent); cursor: pointer; padding: 2px 6px; }
+
   /* Receipt scan */
   .scan-bar { display: flex; gap: 10px; margin-bottom: 16px; }
   .scan-btn { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
@@ -74,7 +84,6 @@
   .field input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; font-size: 16px; color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.2s; -webkit-appearance: none; }
   .field input:focus { border-color: var(--accent); }
   .field input::placeholder { color: #444; }
-  .field input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
   .field input.ai-filled { border-color: rgba(201,240,110,0.5); background: rgba(201,240,110,0.04); }
   .cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .cat-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 10px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', sans-serif; display: flex; align-items: center; gap: 8px; }
@@ -126,7 +135,7 @@
   .empty-icon { font-size: 40px; margin-bottom: 12px; }
   .empty-text { font-size: 14px; }
 
-  /* Monthly summary card */
+  /* Summary */
   .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; }
   .summary-card-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
   .summary-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
@@ -175,13 +184,20 @@
       <p class="page-title" id="form-title">Add expense</p>
       <p class="page-sub" id="form-sub">Scan a receipt or enter manually</p>
 
+      <!-- Sync status bar -->
+      <div class="sync-bar">
+        <div class="sync-dot syncing" id="sync-dot"></div>
+        <span class="sync-text" id="sync-text">Connecting to Google Sheets...</span>
+        <span class="sync-refresh" onclick="loadFromSheets()">↻ Refresh</span>
+      </div>
+
       <!-- Edit mode banner -->
       <div class="edit-banner" id="edit-banner">
         <span class="edit-banner-text">✏️ Editing existing entry</span>
         <span class="edit-banner-cancel" onclick="cancelEdit()">Cancel</span>
       </div>
 
-      <!-- Receipt scan buttons (hidden in edit mode) -->
+      <!-- Receipt scan -->
       <div id="scan-section">
         <div class="scan-bar">
           <button class="scan-btn" onclick="triggerCamera()">
@@ -215,7 +231,7 @@
         <div class="dup-warning-text" id="dup-warning-text"></div>
       </div>
 
-      <!-- Form fields -->
+      <!-- Form -->
       <div class="amount-display" onclick="document.getElementById('amount-input').focus()">
         <div class="amount-label">Amount (SGD)</div>
         <div class="amount-value placeholder" id="amount-display">$0.00</div>
@@ -227,7 +243,6 @@
         <input type="text" id="merchant" placeholder="e.g. Starbucks" oninput="onMerchantInput()">
       </div>
 
-      <!-- Smart category suggestion -->
       <div class="cat-suggestion" id="cat-suggestion">
         <span class="cat-suggestion-text" id="cat-suggestion-text"></span>
         <button class="cat-suggestion-btn" onclick="applySuggestedCat()">Use this</button>
@@ -254,15 +269,15 @@
         <button class="submit-btn" style="margin-top:0;" id="save-btn" onclick="saveExpense()">Save Expense</button>
         <button class="submit-btn" style="margin-top:0; background:var(--surface2); color:var(--muted); border:1px solid var(--border); flex:0 0 auto; width:auto; padding:16px 20px;" onclick="clearForm()">Clear</button>
       </div>
-      <button class="export-btn" onclick="openExportModal(false)">
+      <button class="export-btn" onclick="exportCSV()">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Export all data
+        Export all data to CSV
       </button>
       <button class="export-btn" style="border-color:var(--warn);color:var(--warn);margin-top:8px;" onclick="document.getElementById('import-csv-input').click()">
         <svg viewBox="0 0 24 24" style="stroke:var(--warn);"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Restore from CSV
       </button>
-      <input type="file" id="import-csv-input" accept=".csv" style="display:none" onchange="importFromCSV(event)">
+      <input type="file" id="import-csv-input" accept=".csv" multiple style="display:none" onchange="importFromCSV(event)">
     </div>
 
     <!-- DASHBOARD VIEW -->
@@ -271,7 +286,7 @@
         <div class="month-nav-btn" onclick="changeMonth(-1)">‹</div>
         <div class="month-title" id="month-label"></div>
         <div class="month-nav-btn" onclick="changeMonth(1)">›</div>
-        <div class="month-nav-btn" style="background:transparent;border-color:var(--accent);" onclick="openExportModal(false)">
+        <div class="month-nav-btn" style="background:transparent;border-color:var(--accent);" onclick="exportCSV()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </div>
       </div>
@@ -294,33 +309,10 @@
 
 <div id="toast"></div>
 
-<!-- Scanning overlay -->
 <div class="scan-overlay" id="scan-overlay">
   <div class="scan-spinner"></div>
-  <div class="scan-overlay-text">Reading receipt...</div>
-  <div class="scan-overlay-sub">AI is extracting your expense details</div>
-</div>
-
-<!-- Export modal -->
-<div class="modal-bg" id="export-modal">
-  <div class="modal">
-    <div class="export-modal-content">
-      <div class="export-modal-icon">📊</div>
-      <div class="export-modal-title">Export your data</div>
-      <div class="export-modal-sub" id="export-modal-sub">Save a backup of all your expenses.</div>
-    </div>
-    <div class="export-options">
-      <button class="export-option-btn csv" onclick="exportCSV()">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-        Download CSV (Excel / Numbers)
-      </button>
-      <button class="export-option-btn copy" onclick="copyToClipboard()">
-        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-        Copy to clipboard
-      </button>
-    </div>
-    <button class="skip-btn" id="export-skip-btn" onclick="closeExportModal()">Skip for now</button>
-  </div>
+  <div class="scan-overlay-text" id="scan-overlay-text">Reading receipt...</div>
+  <div class="scan-overlay-sub" id="scan-overlay-sub">AI is extracting your expense details</div>
 </div>
 
 <!-- Manage categories modal -->
@@ -360,57 +352,88 @@
 </div>
 
 <script>
+// ── CONFIG ────────────────────────────────────────────────────
+const SHEETS_API = 'https://script.google.com/macros/s/AKfycbwh-rzFLVuIJdEcG5ssvdCXef4ZOhctIkRJUV-doJx47IlauGUrdNOi87xQJGNLHTg8/exec';
+const RECEIPT_API = 'https://receipt-proxy.paksuan.workers.dev/';
 const CAT_COLORS = ['#f7c948','#6ec9f0','#f06e9e','#6ef0b8','#f0906e','#a06ef0','#6e9ef0','#f0d46e','#e06ef0','#6ef0d4'];
-const DEFAULT_CATS = ['Dining','Shopping','Transport','Groceries','Entertainment','Travel','Utilities','Healthcare'];
+const DEFAULT_CATS = ['Dining','Shopping','Transport','Groceries','Entertainment','Travel','Utilities','Healthcare','Food Delivery','Pets','Coffee','Subscription'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-function getData() {
-  try { return JSON.parse(localStorage.getItem('exp_data') || '{"expenses":[],"cats":[]}'); }
-  catch(e) { return {expenses:[], cats:[]}; }
-}
-function saveData(d) { localStorage.setItem('exp_data', JSON.stringify(d)); }
-function getCats() {
-  const d = getData();
-  if (!d.cats || d.cats.length === 0) { d.cats = DEFAULT_CATS; saveData(d); }
-  return d.cats;
-}
-
+// ── STATE ─────────────────────────────────────────────────────
+let expenses = [];
+let cats = [...DEFAULT_CATS];
 let selectedCat = null;
 let editingId = null;
 let suggestedCat = null;
 let dashMonth = new Date();
 dashMonth = new Date(dashMonth.getFullYear(), dashMonth.getMonth(), 1);
+let isSyncing = false;
+
+// ── GOOGLE SHEETS API ─────────────────────────────────────────
+async function sheetsGet() {
+  const res = await fetch(SHEETS_API);
+  return res.json();
+}
+
+async function sheetsPost(payload) {
+  const res = await fetch(SHEETS_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+function setSyncStatus(status, text) {
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  dot.className = 'sync-dot ' + status;
+  txt.textContent = text;
+}
+
+async function loadFromSheets() {
+  setSyncStatus('syncing', 'Syncing with Google Sheets...');
+  try {
+    const data = await sheetsGet();
+    if (data.success) {
+      expenses = (data.expenses || []).map(e => ({
+        id: String(e.id),
+        amount: parseFloat(e.amount),
+        merchant: e.merchant,
+        date: e.date,
+        cat: e.cat
+      }));
+      if (data.cats && data.cats.length > 0) cats = data.cats;
+      setSyncStatus('ok', `Synced · ${expenses.length} entries`);
+      renderCatGrid();
+      const activeView = document.querySelector('.view.active');
+      if (activeView && activeView.id === 'view-dash') renderDash();
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  } catch(e) {
+    setSyncStatus('error', 'Sync failed — tap ↻ to retry');
+  }
+}
 
 // ── SMART CATEGORY SUGGESTION ─────────────────────────────────
 function onMerchantInput() {
   const merchant = document.getElementById('merchant').value.trim().toLowerCase();
   checkDuplicate();
-  if (!merchant || editingId) {
-    document.getElementById('cat-suggestion').classList.remove('show');
-    return;
-  }
-  const d = getData();
-  if (!d.expenses || d.expenses.length === 0) return;
-  // Find most recent category used for this merchant
-  const matches = d.expenses
+  if (!merchant || editingId) { document.getElementById('cat-suggestion').classList.remove('show'); return; }
+  const matches = expenses
     .filter(e => e.merchant.toLowerCase().includes(merchant) || merchant.includes(e.merchant.toLowerCase()))
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+    .sort((a,b) => new Date(b.date) - new Date(a.date));
   if (matches.length > 0 && !selectedCat) {
-    const suggested = matches[0].cat;
-    suggestedCat = suggested;
-    document.getElementById('cat-suggestion-text').textContent = `Last time: ${suggested}`;
+    suggestedCat = matches[0].cat;
+    document.getElementById('cat-suggestion-text').textContent = `Last time: ${suggestedCat}`;
     document.getElementById('cat-suggestion').classList.add('show');
   } else {
     document.getElementById('cat-suggestion').classList.remove('show');
   }
 }
-
 function applySuggestedCat() {
-  if (suggestedCat) {
-    selectedCat = suggestedCat;
-    renderCatGrid();
-    document.getElementById('cat-suggestion').classList.remove('show');
-    showToast(`Category set to ${suggestedCat}`);
-  }
+  if (suggestedCat) { selectedCat = suggestedCat; renderCatGrid(); document.getElementById('cat-suggestion').classList.remove('show'); showToast(`Category set to ${suggestedCat}`); }
 }
 
 // ── DUPLICATE DETECTION ───────────────────────────────────────
@@ -418,43 +441,27 @@ function checkDuplicate() {
   const merchant = document.getElementById('merchant').value.trim().toLowerCase();
   const amount = parseFloat(document.getElementById('amount-input').value);
   const date = document.getElementById('date').value;
-  if (!merchant || !amount || !date || editingId) {
-    document.getElementById('dup-warning').classList.remove('show');
-    return;
-  }
-  const d = getData();
+  if (!merchant || !amount || !date || editingId) { document.getElementById('dup-warning').classList.remove('show'); return; }
   const inputDate = new Date(date);
-  const oneDayMs = 24 * 60 * 60 * 1000;
-  const dup = d.expenses.find(e => {
-    const eDate = new Date(e.date);
-    return e.merchant.toLowerCase() === merchant &&
-           e.amount === amount &&
-           Math.abs(eDate - inputDate) <= oneDayMs;
-  });
+  const dup = expenses.find(e => e.merchant.toLowerCase() === merchant && e.amount === amount && Math.abs(new Date(e.date) - inputDate) <= 86400000);
   if (dup) {
     const dupDate = new Date(dup.date).toLocaleDateString('en-SG', {day:'numeric', month:'short'});
-    document.getElementById('dup-warning-text').textContent = `You already logged $${dup.amount.toFixed(2)} at ${dup.merchant} on ${dupDate}`;
+    document.getElementById('dup-warning-text').textContent = `Already logged $${dup.amount.toFixed(2)} at ${dup.merchant} on ${dupDate}`;
     document.getElementById('dup-warning').classList.add('show');
-  } else {
-    document.getElementById('dup-warning').classList.remove('show');
-  }
+  } else { document.getElementById('dup-warning').classList.remove('show'); }
 }
 
-// ── EDIT ENTRY ────────────────────────────────────────────────
+// ── EDIT ──────────────────────────────────────────────────────
 function editExpense(id) {
-  const d = getData();
-  const e = d.expenses.find(exp => exp.id === id);
+  const e = expenses.find(exp => String(exp.id) === String(id));
   if (!e) return;
-  editingId = id;
-  // Switch to add tab
+  editingId = String(id);
   switchTab('add');
-  // Show edit banner, hide scan section
   document.getElementById('edit-banner').classList.add('show');
   document.getElementById('scan-section').style.display = 'none';
   document.getElementById('form-title').textContent = 'Edit expense';
   document.getElementById('form-sub').textContent = 'Update the details below';
   document.getElementById('save-btn').textContent = 'Update Expense';
-  // Populate fields
   amountInput.value = e.amount;
   amountDisplay.textContent = '$' + e.amount.toFixed(2);
   amountDisplay.classList.remove('placeholder');
@@ -463,19 +470,13 @@ function editExpense(id) {
   updateDateDisplay();
   selectedCat = e.cat;
   renderCatGrid();
-  // Scroll to top
   document.getElementById('content').scrollTo(0, 0);
 }
-
-function cancelEdit() {
-  editingId = null;
-  clearForm();
-}
+function cancelEdit() { editingId = null; clearForm(); }
 
 // ── RECEIPT SCANNING ──────────────────────────────────────────
 function triggerCamera() { document.getElementById('camera-input').click(); }
 function triggerGallery() { document.getElementById('gallery-input').click(); }
-
 function clearReceipt() {
   document.getElementById('receipt-preview').style.display = 'none';
   document.getElementById('receipt-img').src = '';
@@ -485,43 +486,30 @@ function clearReceipt() {
 }
 
 async function handleReceiptImage(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+  const file = event.target.files[0]; if (!file) return;
   const previewReader = new FileReader();
-  previewReader.onload = (e) => {
-    document.getElementById('receipt-img').src = e.target.result;
-    document.getElementById('receipt-preview').style.display = 'block';
-  };
+  previewReader.onload = (e) => { document.getElementById('receipt-img').src = e.target.result; document.getElementById('receipt-preview').style.display = 'block'; };
   previewReader.readAsDataURL(file);
   document.getElementById('scan-overlay').classList.add('open');
   try {
     const base64 = await fileToBase64(file);
-    const cats = getCats();
-    const response = await fetch('https://receipt-proxy.paksuan.workers.dev/', {
+    const response = await fetch(RECEIPT_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
         max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-            { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge. IMPORTANT: This user is based in Singapore — always interpret ambiguous dates (e.g. 07/08/2026) as DD/MM/YYYY format, never MM/DD/YYYY. Convert all dates to YYYY-MM-DD format. Date year if missing = ${new Date().getFullYear()}.` }
-          ]
-        }]
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+          { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge. IMPORTANT: This user is based in Singapore — always interpret ambiguous dates (e.g. 07/08/2026) as DD/MM/YYYY format, never MM/DD/YYYY. Convert all dates to YYYY-MM-DD format. Date year if missing = ${new Date().getFullYear()}.` }
+        ]}]
       })
     });
     const data = await response.json();
-    const rawText = data.content?.[0]?.text || '';
     let parsed;
-    try { parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim()); }
+    try { parsed = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g, '').trim()); }
     catch(e) { throw new Error('Could not read receipt — please fill in manually'); }
-    if (parsed.amount && parsed.amount > 0) {
-      amountInput.value = parsed.amount;
-      amountDisplay.textContent = '$' + parseFloat(parsed.amount).toFixed(2);
-      amountDisplay.classList.remove('placeholder');
-    }
+    if (parsed.amount && parsed.amount > 0) { amountInput.value = parsed.amount; amountDisplay.textContent = '$' + parseFloat(parsed.amount).toFixed(2); amountDisplay.classList.remove('placeholder'); }
     if (parsed.merchant) { const mi = document.getElementById('merchant'); mi.value = parsed.merchant; mi.classList.add('ai-filled'); onMerchantInput(); }
     if (parsed.date) { const di = document.getElementById('date'); di.value = parsed.date; di.classList.add('ai-filled'); updateDateDisplay(); }
     if (parsed.category && cats.includes(parsed.category)) { selectedCat = parsed.category; renderCatGrid(); }
@@ -535,14 +523,12 @@ async function handleReceiptImage(event) {
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
+    const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
       const canvas = document.createElement('canvas');
       const MAX = 1024; let w = img.width, h = img.height;
-      if (w > h) { if (w > MAX) { h = Math.round(h*MAX/w); w = MAX; } }
-      else { if (h > MAX) { w = Math.round(w*MAX/h); h = MAX; } }
+      if (w > h) { if (w > MAX) { h = Math.round(h*MAX/w); w = MAX; } } else { if (h > MAX) { w = Math.round(w*MAX/h); h = MAX; } }
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
@@ -553,8 +539,7 @@ function fileToBase64(file) {
 
 // ── CATEGORIES ────────────────────────────────────────────────
 function renderCatGrid() {
-  const grid = document.getElementById('cat-grid'), cats = getCats();
-  grid.innerHTML = '';
+  const grid = document.getElementById('cat-grid'); grid.innerHTML = '';
   cats.forEach((c, i) => {
     const btn = document.createElement('button');
     btn.className = 'cat-btn' + (selectedCat === c ? ' selected' : '');
@@ -569,15 +554,17 @@ function renderCatGrid() {
 
 function openCatModal() { document.getElementById('cat-modal').classList.add('open'); setTimeout(() => document.getElementById('new-cat-input').focus(), 300); }
 function closeCatModal() { document.getElementById('cat-modal').classList.remove('open'); document.getElementById('new-cat-input').value = ''; }
-function confirmNewCat() {
+async function confirmNewCat() {
   const val = document.getElementById('new-cat-input').value.trim(); if (!val) return;
-  const d = getData(); if (!d.cats.includes(val)) { d.cats.push(val); saveData(d); }
+  if (!cats.includes(val)) {
+    cats.push(val);
+    await sheetsPost({ action: 'updateCats', cats });
+  }
   selectedCat = val; closeCatModal(); renderCatGrid();
 }
 
 function openManageCatsModal() {
-  const cats = getCats(), list = document.getElementById('cat-edit-list');
-  list.innerHTML = '';
+  const list = document.getElementById('cat-edit-list'); list.innerHTML = '';
   cats.forEach((c, i) => {
     const item = document.createElement('div'); item.className = 'cat-edit-item';
     item.innerHTML = `<span class="cat-edit-dot" style="background:${CAT_COLORS[i%CAT_COLORS.length]}"></span>
@@ -589,12 +576,11 @@ function openManageCatsModal() {
 }
 function deleteCatItem(btn) {
   const item = btn.closest('.cat-edit-item'), original = item.querySelector('.cat-edit-input').dataset.original;
-  const d = getData();
-  if (d.expenses && d.expenses.some(e => e.cat === original)) { showToast('Cannot delete — used in existing expenses'); return; }
+  if (expenses.some(e => e.cat === original)) { showToast('Cannot delete — used in existing expenses'); return; }
   item.style.opacity = '0.3'; item.style.pointerEvents = 'none'; item.dataset.deleted = 'true';
 }
 function closeManageCatsModal() { document.getElementById('manage-cats-modal').classList.remove('open'); }
-function saveManageCats() {
+async function saveManageCats() {
   const items = document.querySelectorAll('#cat-edit-list .cat-edit-item');
   const newCats = []; let hasEmpty = false, hasDuplicate = false;
   items.forEach(item => {
@@ -606,19 +592,31 @@ function saveManageCats() {
   if (hasEmpty) { showToast('Category name cannot be empty'); return; }
   if (hasDuplicate) { showToast('Duplicate category names found'); return; }
   if (newCats.length === 0) { showToast('Must have at least one category'); return; }
-  const d = getData();
+
+  // Update renamed categories in expenses
+  const renames = {};
   items.forEach(item => {
     if (item.dataset.deleted === 'true') return;
     const original = item.querySelector('.cat-edit-input').dataset.original;
     const newVal = item.querySelector('.cat-edit-input').value.trim();
-    if (original !== newVal && d.expenses) d.expenses.forEach(e => { if (e.cat === original) e.cat = newVal; });
+    if (original !== newVal) renames[original] = newVal;
   });
-  d.cats = newCats; saveData(d);
-  if (selectedCat && !newCats.includes(selectedCat)) selectedCat = null;
+
+  // Update expenses with renamed cats
+  for (const exp of expenses) {
+    if (renames[exp.cat]) {
+      exp.cat = renames[exp.cat];
+      await sheetsPost({ action: 'update', ...exp });
+    }
+  }
+
+  cats = newCats;
+  await sheetsPost({ action: 'updateCats', cats });
+  if (selectedCat && !cats.includes(selectedCat)) selectedCat = null;
   closeManageCatsModal(); renderCatGrid(); showToast('Categories updated!');
 }
 
-// ── AMOUNT INPUT ──────────────────────────────────────────────
+// ── AMOUNT + DATE ─────────────────────────────────────────────
 const amountInput = document.getElementById('amount-input');
 const amountDisplay = document.getElementById('amount-display');
 amountInput.addEventListener('input', () => {
@@ -630,16 +628,13 @@ amountInput.addEventListener('input', () => {
 
 function formatDateDisplay(dateStr) {
   if (!dateStr) return 'Select date';
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const [y, m, d] = dateStr.split('-');
-  return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+  return `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y}`;
 }
-
 function updateDateDisplay() {
   const val = document.getElementById('date').value;
   document.getElementById('date-display-text').textContent = formatDateDisplay(val);
 }
-
 function setToday() {
   const d = new Date();
   const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -665,7 +660,7 @@ function clearForm() {
 }
 
 // ── SAVE / UPDATE ─────────────────────────────────────────────
-function saveExpense() {
+async function saveExpense() {
   const amount = parseFloat(amountInput.value);
   const merchant = document.getElementById('merchant').value.trim();
   const date = document.getElementById('date').value;
@@ -673,185 +668,111 @@ function saveExpense() {
   if (!merchant) { showToast('Please enter a merchant'); return; }
   if (!date) { showToast('Please select a date'); return; }
   if (!selectedCat) { showToast('Please select a category'); return; }
-  const d = getData();
-  if (editingId) {
-    // Update existing
-    const idx = d.expenses.findIndex(e => e.id === editingId);
-    if (idx > -1) { d.expenses[idx] = { ...d.expenses[idx], amount, merchant, date, cat: selectedCat }; }
-    saveData(d); clearForm(); showToast('Entry updated!');
-  } else {
-    // New entry
-    d.expenses.push({ id: Date.now(), amount, merchant, date, cat: selectedCat });
-    saveData(d);
-    clearForm();
-    showToast('Expense saved!');
-    setTimeout(() => openExportModal(true), 800);
+
+  setSyncStatus('syncing', 'Saving...');
+  document.getElementById('save-btn').disabled = true;
+
+  try {
+    if (editingId) {
+      const payload = { action: 'update', id: editingId, amount, merchant, date, cat: selectedCat };
+      await sheetsPost(payload);
+      const idx = expenses.findIndex(e => String(e.id) === String(editingId));
+      if (idx > -1) expenses[idx] = { id: editingId, amount, merchant, date, cat: selectedCat };
+      clearForm();
+      setSyncStatus('ok', `Synced · ${expenses.length} entries`);
+      showToast('Entry updated!');
+    } else {
+      const id = String(Date.now());
+      const payload = { action: 'add', id, amount, merchant, date, cat: selectedCat };
+      await sheetsPost(payload);
+      expenses.push({ id, amount, merchant, date, cat: selectedCat });
+      clearForm();
+      setSyncStatus('ok', `Synced · ${expenses.length} entries`);
+      showToast('Expense saved!');
+    }
+  } catch(e) {
+    setSyncStatus('error', 'Save failed — tap ↻ to retry');
+    showToast('Save failed — check connection');
+  }
+  document.getElementById('save-btn').disabled = false;
+}
+
+// ── DELETE ────────────────────────────────────────────────────
+async function deleteExpense(id) {
+  setSyncStatus('syncing', 'Deleting...');
+  try {
+    await sheetsPost({ action: 'delete', id: String(id) });
+    expenses = expenses.filter(e => String(e.id) !== String(id));
+    setSyncStatus('ok', `Synced · ${expenses.length} entries`);
+    renderDash();
+  } catch(e) {
+    setSyncStatus('error', 'Delete failed — tap ↻ to retry');
+    showToast('Delete failed — check connection');
   }
 }
 
 // ── EXPORT ────────────────────────────────────────────────────
+function exportCSV() {
+  if (!expenses || expenses.length === 0) { showToast('No expenses to export yet'); return; }
+  let csv = 'Date,Amount (SGD),Merchant,Category\n';
+  [...expenses].sort((a,b) => new Date(a.date)-new Date(b.date)).forEach(e => {
+    const ds = new Date(e.date).toLocaleDateString('en-SG', {day:'2-digit', month:'short', year:'numeric'});
+    csv += `${ds},${e.amount.toFixed(2)},"${e.merchant}","${e.cat}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob), a = document.createElement('a'), now = new Date();
+  a.href = url; a.download = `expenses_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('CSV downloaded!');
+}
+
 // ── IMPORT FROM CSV ───────────────────────────────────────────
 function importFromCSV(event) {
-  const files = event.target.files;
-  if (!files || files.length === 0) return;
-  let totalImported = 0, totalSkipped = 0, filesProcessed = 0;
-  const d = getData();
-  const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  const files = event.target.files; if (!files || files.length === 0) return;
+  const monthMap = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  let allExpenses = [], filesProcessed = 0;
 
   Array.from(files).forEach(file => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = text.split('\n').filter(l => l.trim());
-      // Skip header row
+    reader.onload = async (e) => {
+      const lines = e.target.result.split('\n').filter(l => l.trim());
       lines.slice(1).forEach(line => {
-        if (!line.trim()) return;
-        // Parse CSV line: Date, Amount, Merchant, Category
-        const parts = line.match(/(".*?"|[^,]+)(?=,|$)/g);
-        if (!parts || parts.length < 4) return;
+        const parts = line.match(/(".*?"|[^,]+)(?=,|$)/g); if (!parts || parts.length < 4) return;
         const dateRaw = parts[0].replace(/"/g,'').trim();
         const amount = parseFloat(parts[1].replace(/"/g,'').trim());
         const merchant = parts[2].replace(/"/g,'').trim();
         const cat = parts[3].replace(/"/g,'').trim();
         if (!dateRaw || isNaN(amount) || !merchant || !cat) return;
-
-        // Parse date — handles "11 Sep 2026" format
         let dateISO = null;
-        const monthMatch = dateRaw.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
-        if (monthMatch) {
-          const day = String(parseInt(monthMatch[1])).padStart(2,'0');
-          const mon = String((months[monthMatch[2].toLowerCase()]||0)+1).padStart(2,'0');
-          dateISO = `${monthMatch[3]}-${mon}-${day}`;
-        } else if (dateRaw.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          dateISO = dateRaw;
-        }
+        const mm = dateRaw.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+        if (mm) { dateISO = `${mm[3]}-${String((monthMap[mm[2].toLowerCase()]||0)+1).padStart(2,'0')}-${String(parseInt(mm[1])).padStart(2,'0')}`; }
+        else if (dateRaw.match(/^\d{4}-\d{2}-\d{2}$/)) { dateISO = dateRaw; }
         if (!dateISO) return;
-
-        // Check for duplicate by amount + merchant + date
-        const exists = d.expenses.some(ex => ex.amount === amount && ex.merchant === merchant && ex.date === dateISO);
-        if (exists) { totalSkipped++; return; }
-
-        d.expenses.push({ id: Date.now() + Math.random(), amount, merchant, date: dateISO, cat });
-        totalImported++;
+        const exists = expenses.some(ex => ex.amount === amount && ex.merchant === merchant && ex.date === dateISO);
+        if (!exists) allExpenses.push({ id: String(Date.now() + Math.random()), amount, merchant, date: dateISO, cat });
       });
 
       filesProcessed++;
-      if (filesProcessed === files.length) {
-        // Add any new categories found
-        d.expenses.forEach(ex => { if (!d.cats.includes(ex.cat)) d.cats.push(ex.cat); });
-        saveData(d);
-        renderCatGrid();
+      if (filesProcessed === files.length && allExpenses.length > 0) {
+        setSyncStatus('syncing', `Importing ${allExpenses.length} entries...`);
+        try {
+          await sheetsPost({ action: 'bulkImport', expenses: allExpenses });
+          expenses.push(...allExpenses);
+          setSyncStatus('ok', `Synced · ${expenses.length} entries`);
+          showToast(`✓ Imported ${allExpenses.length} entries`);
+          renderCatGrid();
+        } catch(err) {
+          setSyncStatus('error', 'Import failed — tap ↻ to retry');
+          showToast('Import failed — check connection');
+        }
         document.getElementById('import-csv-input').value = '';
-        showToast(`✓ Imported ${totalImported} entries (${totalSkipped} duplicates skipped)`);
+      } else if (filesProcessed === files.length) {
+        showToast('No new entries to import');
+        document.getElementById('import-csv-input').value = '';
       }
     };
     reader.readAsText(file);
   });
-}
-
-function buildCSV() {
-  const d = getData(); if (!d.expenses || d.expenses.length === 0) return null;
-  let csv = 'Date,Amount (SGD),Merchant,Category\n';
-  [...d.expenses].sort((a,b) => new Date(a.date)-new Date(b.date)).forEach(e => {
-    const ds = new Date(e.date).toLocaleDateString('en-SG', {day:'2-digit', month:'short', year:'numeric'});
-    csv += `${ds},${e.amount.toFixed(2)},"${e.merchant}","${e.cat}"\n`;
-  });
-  return csv;
-}
-function openExportModal(afterSave) {
-  const d = getData(); if (!d.expenses || d.expenses.length === 0) { showToast('No expenses to export yet'); return; }
-  document.getElementById('export-modal-sub').textContent = afterSave ? 'Expense saved! Would you like to export a backup now?' : `Export all ${d.expenses.length} expenses as a CSV file.`;
-  document.getElementById('export-skip-btn').textContent = afterSave ? 'Skip for now' : 'Cancel';
-  document.getElementById('export-modal').classList.add('open');
-}
-function closeExportModal() { document.getElementById('export-modal').classList.remove('open'); }
-function exportCSV() {
-  const csv = buildCSV(); if (!csv) { showToast('No data to export'); return; }
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }), url = URL.createObjectURL(blob), a = document.createElement('a'), now = new Date();
-  a.href = url; a.download = `expenses_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  closeExportModal(); showToast('CSV downloaded!');
-}
-function copyToClipboard() {
-  const csv = buildCSV(); if (!csv) { showToast('No data to export'); return; }
-  navigator.clipboard.writeText(csv).then(() => { closeExportModal(); showToast('Copied to clipboard!'); })
-    .catch(() => { const ta = document.createElement('textarea'); ta.value = csv; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); closeExportModal(); showToast('Copied to clipboard!'); });
-}
-
-// ── MONTHLY SUMMARY ───────────────────────────────────────────
-function buildMonthlySummary(y, m) {
-  const d = getData(), cats = getCats();
-  const monthName = new Date(y, m, 1).toLocaleDateString('en-SG', {month:'long', year:'numeric'});
-  const exps = d.expenses.filter(e => { const ed = new Date(e.date); return ed.getFullYear()===y && ed.getMonth()===m; });
-  if (exps.length === 0) return { html: `<div style="text-align:center;color:var(--muted);padding:20px;">No expenses for ${monthName}</div>`, text: `No expenses for ${monthName}` };
-
-  const total = exps.reduce((s,e) => s+e.amount, 0);
-  const byCat = {}; exps.forEach(e => { byCat[e.cat] = (byCat[e.cat]||0)+e.amount; });
-  const sortedCats = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
-
-  // Compare with last month
-  const prevMonth = m === 0 ? 11 : m-1, prevYear = m === 0 ? y-1 : y;
-  const prevExps = d.expenses.filter(e => { const ed = new Date(e.date); return ed.getFullYear()===prevYear && ed.getMonth()===prevMonth; });
-  const prevTotal = prevExps.reduce((s,e) => s+e.amount, 0);
-  const diff = total - prevTotal, diffPct = prevTotal > 0 ? Math.round((diff/prevTotal)*100) : null;
-
-  // Top merchants
-  const byMerchant = {}; exps.forEach(e => { byMerchant[e.merchant] = (byMerchant[e.merchant]||0)+e.amount; });
-  const topMerchants = Object.entries(byMerchant).sort((a,b) => b[1]-a[1]).slice(0,3);
-
-  let html = `<div style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:14px;">${monthName}</div>`;
-
-  // Total + comparison
-  html += `<div class="summary-card"><div class="summary-card-title">Total Spending</div>`;
-  html += `<div class="summary-row"><span class="summary-row-label">Total</span><span class="summary-row-val">$${total.toFixed(2)}</span></div>`;
-  html += `<div class="summary-row"><span class="summary-row-label">Transactions</span><span class="summary-row-val">${exps.length}</span></div>`;
-  if (diffPct !== null) {
-    const dir = diff > 0 ? '▲' : '▼', cls = diff > 0 ? 'up' : 'down', prevName = new Date(prevYear, prevMonth, 1).toLocaleDateString('en-SG',{month:'short'});
-    html += `<div class="summary-row"><span class="summary-row-label">vs ${prevName}</span><span class="summary-row-val ${cls}">${dir} ${Math.abs(diffPct)}% ($${Math.abs(diff).toFixed(2)})</span></div>`;
-  }
-  html += `</div>`;
-
-  // By category
-  html += `<div class="summary-card"><div class="summary-card-title">By Category</div>`;
-  sortedCats.forEach(([cat, amt]) => {
-    const pct = Math.round((amt/total)*100);
-    html += `<div class="summary-row"><span class="summary-row-label">${cat}</span><span class="summary-row-val">$${amt.toFixed(2)} <span style="font-size:11px;color:var(--muted);">${pct}%</span></span></div>`;
-  });
-  html += `</div>`;
-
-  // Top merchants
-  if (topMerchants.length > 0) {
-    html += `<div class="summary-card"><div class="summary-card-title">Top Merchants</div>`;
-    topMerchants.forEach(([merchant, amt], i) => {
-      html += `<div class="summary-row"><span class="summary-row-label">${i+1}. ${merchant}</span><span class="summary-row-val">$${amt.toFixed(2)}</span></div>`;
-    });
-    html += `</div>`;
-  }
-
-  // Build plain text version for copy
-  let text = `📊 ${monthName} Expense Summary\n`;
-  text += `━━━━━━━━━━━━━━━━━━\n`;
-  text += `Total: $${total.toFixed(2)} (${exps.length} transactions)\n`;
-  if (diffPct !== null) { const dir = diff > 0 ? '▲' : '▼'; text += `vs last month: ${dir} ${Math.abs(diffPct)}% ($${Math.abs(diff).toFixed(2)})\n`; }
-  text += `\nBy Category:\n`;
-  sortedCats.forEach(([cat, amt]) => { text += `  ${cat}: $${amt.toFixed(2)} (${Math.round((amt/total)*100)}%)\n`; });
-  if (topMerchants.length > 0) { text += `\nTop Merchants:\n`; topMerchants.forEach(([m, amt], i) => { text += `  ${i+1}. ${m}: $${amt.toFixed(2)}\n`; }); }
-
-  return { html, text };
-}
-
-let currentSummaryText = '';
-function openSummaryModal() {
-  const y = dashMonth.getFullYear(), m = dashMonth.getMonth();
-  const { html, text } = buildMonthlySummary(y, m);
-  currentSummaryText = text;
-  document.getElementById('summary-content').innerHTML = html;
-  document.getElementById('summary-modal').classList.add('open');
-}
-function closeSummaryModal() { document.getElementById('summary-modal').classList.remove('open'); }
-function copySummary() {
-  navigator.clipboard.writeText(currentSummaryText).then(() => { showToast('Summary copied!'); })
-    .catch(() => { const ta = document.createElement('textarea'); ta.value = currentSummaryText; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Summary copied!'); });
 }
 
 // ── TOAST ─────────────────────────────────────────────────────
@@ -874,8 +795,7 @@ function changeMonth(dir) { dashMonth = new Date(dashMonth.getFullYear(), dashMo
 function renderDash() {
   const y = dashMonth.getFullYear(), m = dashMonth.getMonth();
   document.getElementById('month-label').textContent = dashMonth.toLocaleDateString('en-SG', {month:'long',year:'numeric'});
-  const d = getData(), cats = getCats();
-  const exps = d.expenses.filter(e => { const ed = new Date(e.date); return ed.getFullYear()===y && ed.getMonth()===m; });
+  const exps = expenses.filter(e => { const ed = new Date(e.date); return ed.getFullYear()===y && ed.getMonth()===m; });
   const container = document.getElementById('dash-content');
   if (exps.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">No expenses for this month</div></div>`; return; }
   const total = exps.reduce((s,e) => s+e.amount, 0);
@@ -907,18 +827,69 @@ function renderDash() {
       <div><div class="tx-name">${e.merchant}</div><div class="tx-meta">${dateStr} · ${e.cat}</div></div></div>
       <div style="display:flex;align-items:center;gap:6px;">
         <div class="tx-amount">$${e.amount.toFixed(2)}</div>
-        <div class="tx-edit" onclick="editExpense(${e.id})">✏️</div>
-        <div class="tx-delete" onclick="deleteExpense(${e.id})">✕</div>
+        <div class="tx-edit" onclick="editExpense('${e.id}')">✏️</div>
+        <div class="tx-delete" onclick="deleteExpense('${e.id}')">✕</div>
       </div>
     </div>`;
   });
   html += `</div>`;
   container.innerHTML = html;
 }
-function deleteExpense(id) { const d = getData(); d.expenses = d.expenses.filter(e => e.id!==id); saveData(d); renderDash(); }
 
-// Init
-setToday(); renderCatGrid();
+// ── MONTHLY SUMMARY ───────────────────────────────────────────
+let currentSummaryText = '';
+function openSummaryModal() {
+  const y = dashMonth.getFullYear(), m = dashMonth.getMonth();
+  const monthName = dashMonth.toLocaleDateString('en-SG', {month:'long', year:'numeric'});
+  const exps = expenses.filter(e => { const ed = new Date(e.date); return ed.getFullYear()===y && ed.getMonth()===m; });
+  if (exps.length === 0) { showToast('No expenses for this month'); return; }
+  const total = exps.reduce((s,e) => s+e.amount, 0);
+  const byCat = {}; exps.forEach(e => { byCat[e.cat] = (byCat[e.cat]||0)+e.amount; });
+  const sortedCats = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
+  const prevM = m===0?11:m-1, prevY = m===0?y-1:y;
+  const prevExps = expenses.filter(e => { const ed = new Date(e.date); return ed.getFullYear()===prevY && ed.getMonth()===prevM; });
+  const prevTotal = prevExps.reduce((s,e) => s+e.amount, 0);
+  const diff = total - prevTotal, diffPct = prevTotal > 0 ? Math.round((diff/prevTotal)*100) : null;
+  const byMerchant = {}; exps.forEach(e => { byMerchant[e.merchant] = (byMerchant[e.merchant]||0)+e.amount; });
+  const topMerchants = Object.entries(byMerchant).sort((a,b) => b[1]-a[1]).slice(0,3);
+
+  let html = `<div style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:14px;">${monthName}</div>`;
+  html += `<div class="summary-card"><div class="summary-card-title">Total Spending</div>`;
+  html += `<div class="summary-row"><span class="summary-row-label">Total</span><span class="summary-row-val">$${total.toFixed(2)}</span></div>`;
+  html += `<div class="summary-row"><span class="summary-row-label">Transactions</span><span class="summary-row-val">${exps.length}</span></div>`;
+  if (diffPct !== null) {
+    const dir = diff>0?'▲':'▼', cls = diff>0?'up':'down';
+    const prevName = new Date(prevY,prevM,1).toLocaleDateString('en-SG',{month:'short'});
+    html += `<div class="summary-row"><span class="summary-row-label">vs ${prevName}</span><span class="summary-row-val ${cls}">${dir} ${Math.abs(diffPct)}% ($${Math.abs(diff).toFixed(2)})</span></div>`;
+  }
+  html += `</div><div class="summary-card"><div class="summary-card-title">By Category</div>`;
+  sortedCats.forEach(([cat,amt]) => { html += `<div class="summary-row"><span class="summary-row-label">${cat}</span><span class="summary-row-val">$${amt.toFixed(2)} <span style="font-size:11px;color:var(--muted);">${Math.round((amt/total)*100)}%</span></span></div>`; });
+  html += `</div>`;
+  if (topMerchants.length > 0) {
+    html += `<div class="summary-card"><div class="summary-card-title">Top Merchants</div>`;
+    topMerchants.forEach(([merchant,amt],i) => { html += `<div class="summary-row"><span class="summary-row-label">${i+1}. ${merchant}</span><span class="summary-row-val">$${amt.toFixed(2)}</span></div>`; });
+    html += `</div>`;
+  }
+
+  let text = `📊 ${monthName} Expense Summary\n━━━━━━━━━━━━━━━━━━\nTotal: $${total.toFixed(2)} (${exps.length} transactions)\n`;
+  if (diffPct !== null) { const dir=diff>0?'▲':'▼'; text += `vs last month: ${dir} ${Math.abs(diffPct)}% ($${Math.abs(diff).toFixed(2)})\n`; }
+  text += `\nBy Category:\n`; sortedCats.forEach(([cat,amt]) => { text += `  ${cat}: $${amt.toFixed(2)} (${Math.round((amt/total)*100)}%)\n`; });
+  if (topMerchants.length > 0) { text += `\nTop Merchants:\n`; topMerchants.forEach(([m,amt],i) => { text += `  ${i+1}. ${m}: $${amt.toFixed(2)}\n`; }); }
+  currentSummaryText = text;
+
+  document.getElementById('summary-content').innerHTML = html;
+  document.getElementById('summary-modal').classList.add('open');
+}
+function closeSummaryModal() { document.getElementById('summary-modal').classList.remove('open'); }
+function copySummary() {
+  navigator.clipboard.writeText(currentSummaryText).then(() => showToast('Summary copied!'))
+    .catch(() => { const ta = document.createElement('textarea'); ta.value = currentSummaryText; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Summary copied!'); });
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+setToday();
+renderCatGrid();
+loadFromSheets();
 </script>
 </body>
 </html>
