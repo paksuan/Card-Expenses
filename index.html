@@ -498,8 +498,20 @@ async function handleReceiptImage(event) {
     });
     const data = await response.json();
     let parsed;
-    try { parsed = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g, '').trim()); }
-    catch(e) { throw new Error('Could not read receipt — please fill in manually'); }
+    try {
+      // Handle both direct text and nested content array
+      let rawText = '';
+      if (data.content && Array.isArray(data.content)) {
+        const textBlock = data.content.find(b => b.type === 'text');
+        rawText = textBlock ? textBlock.text : '';
+      } else if (typeof data.content === 'string') {
+        rawText = data.content;
+      } else if (data.text) {
+        rawText = data.text;
+      }
+      if (!rawText) throw new Error('Empty response');
+      parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+    } catch(e) { throw new Error('Could not read receipt — please fill in manually'); }
     if (parsed.amount && parsed.amount > 0) { amountInput.value = parsed.amount; amountDisplay.textContent = '$' + parseFloat(parsed.amount).toFixed(2); amountDisplay.classList.remove('placeholder'); }
     if (parsed.merchant) { const mi = document.getElementById('merchant'); mi.value = parsed.merchant; mi.classList.add('ai-filled'); onMerchantInput(); }
     if (parsed.date) { const di = document.getElementById('date'); di.value = parsed.date; di.classList.add('ai-filled'); updateDateDisplay(); }
