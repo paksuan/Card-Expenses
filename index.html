@@ -497,9 +497,12 @@ async function handleReceiptImage(event) {
       })
     });
     const data = await response.json();
+    // Debug — show raw response
+    const debugText = JSON.stringify(data).substring(0, 200);
+    showToast(debugText);
+    await new Promise(r => setTimeout(r, 4000));
     let parsed;
     try {
-      // Handle both direct text and nested content array
       let rawText = '';
       if (data.content && Array.isArray(data.content)) {
         const textBlock = data.content.find(b => b.type === 'text');
