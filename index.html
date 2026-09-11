@@ -258,6 +258,11 @@
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Export all data
       </button>
+      <button class="export-btn" style="border-color:var(--warn);color:var(--warn);margin-top:8px;" onclick="document.getElementById('import-csv-input').click()">
+        <svg viewBox="0 0 24 24" style="stroke:var(--warn);"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Restore from CSV
+      </button>
+      <input type="file" id="import-csv-input" accept=".csv" style="display:none" onchange="importFromCSV(event)">
     </div>
 
     <!-- DASHBOARD VIEW -->
@@ -685,6 +690,65 @@ function saveExpense() {
 }
 
 // ── EXPORT ────────────────────────────────────────────────────
+// ── IMPORT FROM CSV ───────────────────────────────────────────
+function importFromCSV(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+  let totalImported = 0, totalSkipped = 0, filesProcessed = 0;
+  const d = getData();
+  const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim());
+      // Skip header row
+      lines.slice(1).forEach(line => {
+        if (!line.trim()) return;
+        // Parse CSV line: Date, Amount, Merchant, Category
+        const parts = line.match(/(".*?"|[^,]+)(?=,|$)/g);
+        if (!parts || parts.length < 4) return;
+        const dateRaw = parts[0].replace(/"/g,'').trim();
+        const amount = parseFloat(parts[1].replace(/"/g,'').trim());
+        const merchant = parts[2].replace(/"/g,'').trim();
+        const cat = parts[3].replace(/"/g,'').trim();
+        if (!dateRaw || isNaN(amount) || !merchant || !cat) return;
+
+        // Parse date — handles "11 Sep 2026" format
+        let dateISO = null;
+        const monthMatch = dateRaw.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+        if (monthMatch) {
+          const day = String(parseInt(monthMatch[1])).padStart(2,'0');
+          const mon = String((months[monthMatch[2].toLowerCase()]||0)+1).padStart(2,'0');
+          dateISO = `${monthMatch[3]}-${mon}-${day}`;
+        } else if (dateRaw.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          dateISO = dateRaw;
+        }
+        if (!dateISO) return;
+
+        // Check for duplicate by amount + merchant + date
+        const exists = d.expenses.some(ex => ex.amount === amount && ex.merchant === merchant && ex.date === dateISO);
+        if (exists) { totalSkipped++; return; }
+
+        d.expenses.push({ id: Date.now() + Math.random(), amount, merchant, date: dateISO, cat });
+        totalImported++;
+      });
+
+      filesProcessed++;
+      if (filesProcessed === files.length) {
+        // Add any new categories found
+        d.expenses.forEach(ex => { if (!d.cats.includes(ex.cat)) d.cats.push(ex.cat); });
+        saveData(d);
+        renderCatGrid();
+        document.getElementById('import-csv-input').value = '';
+        showToast(`✓ Imported ${totalImported} entries (${totalSkipped} duplicates skipped)`);
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
 function buildCSV() {
   const d = getData(); if (!d.expenses || d.expenses.length === 0) return null;
   let csv = 'Date,Amount (SGD),Merchant,Category\n';
