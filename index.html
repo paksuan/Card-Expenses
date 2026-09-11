@@ -478,16 +478,12 @@ function clearReceipt() {
 
 async function handleReceiptImage(event) {
   const file = event.target.files[0]; if (!file) return;
-  showToast('File selected: ' + file.name + ' ' + file.type + ' ' + file.size);
-  await new Promise(r => setTimeout(r, 3000));
   const previewReader = new FileReader();
   previewReader.onload = (e) => { document.getElementById('receipt-img').src = e.target.result; document.getElementById('receipt-preview').style.display = 'block'; };
   previewReader.readAsDataURL(file);
   document.getElementById('scan-overlay').classList.add('open');
   try {
     const base64 = await fileToBase64(file);
-    showToast('Base64 done, length: ' + base64.length);
-    await new Promise(r => setTimeout(r, 2000));
     let response, data;
     try {
       response = await fetch(RECEIPT_API, {
@@ -498,22 +494,18 @@ async function handleReceiptImage(event) {
           max_tokens: 1000,
           messages: [{ role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-            { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge. IMPORTANT: This user is based in Singapore — always interpret ambiguous dates (e.g. 07/08/2026) as DD/MM/YYYY format, never MM/DD/YYYY. Convert all dates to YYYY-MM-DD format. Date year if missing = ${new Date().getFullYear()}.` }
+            { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge.\n\nCRITICAL DATE RULE: This user is in Singapore (UTC+8). ALL dates must be interpreted as DD/MM/YY or DD/MM/YYYY format — NEVER as MM/DD format. Examples:\n- "8/9/26" = 8 September 2026 = 2026-09-08 (NOT August 9)\n- "07/08/2026" = 7 August 2026 = 2026-08-07 (NOT July 8)\n- "1/12/26" = 1 December 2026 = 2026-12-01 (NOT January 12)\nThe first number is ALWAYS the day, second is ALWAYS the month. Year 2-digit: assume 20XX. Convert all dates to YYYY-MM-DD format. If year is missing assume ${new Date().getFullYear()}.` }
           ]}]
         })
       });
     } catch(fetchErr) {
-      throw new Error('Fetch failed: ' + fetchErr.message);
+      throw new Error('Connection failed — check your internet and try again');
     }
-    showToast('Got response: ' + response.status);
-    await new Promise(r => setTimeout(r, 1500));
     try {
       data = await response.json();
     } catch(jsonErr) {
-      throw new Error('JSON parse failed: ' + jsonErr.message);
+      throw new Error('Could not read receipt — please fill in manually');
     }
-    showToast(JSON.stringify(data).substring(0, 150));
-    await new Promise(r => setTimeout(r, 4000));
     let parsed;
     try {
       let rawText = '';
@@ -525,9 +517,9 @@ async function handleReceiptImage(event) {
       } else if (data.text) {
         rawText = data.text;
       }
-      if (!rawText) throw new Error('Empty response: ' + JSON.stringify(data).substring(0,100));
+      if (!rawText) throw new Error('empty');
       parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
-    } catch(e) { throw new Error('Parse failed: ' + e.message); }
+    } catch(e) { throw new Error('Could not read receipt — please fill in manually'); }
     if (parsed.amount && parsed.amount > 0) { amountInput.value = parsed.amount; amountDisplay.textContent = '$' + parseFloat(parsed.amount).toFixed(2); amountDisplay.classList.remove('placeholder'); }
     if (parsed.merchant) { const mi = document.getElementById('merchant'); mi.value = parsed.merchant; mi.classList.add('ai-filled'); onMerchantInput(); }
     if (parsed.date) { const di = document.getElementById('date'); di.value = parsed.date; di.classList.add('ai-filled'); updateDateDisplay(); }
