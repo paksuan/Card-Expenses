@@ -705,20 +705,24 @@ async function saveExpense() {
   try {
     if (editingId) {
       const payload = { action: 'update', id: editingId, amount, merchant, date, cat: selectedCat };
-      await sheetsPost(payload);
+      // Optimistic update — update UI immediately
       const idx = expenses.findIndex(e => String(e.id) === String(editingId));
       if (idx > -1) expenses[idx] = { id: editingId, amount, merchant, date, cat: selectedCat };
       clearForm();
       setSyncStatus('ok', `Synced · ${expenses.length} entries`);
       showToast('Entry updated!');
+      // Send to Sheets in background
+      sheetsPost(payload).catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
     } else {
       const id = String(Date.now());
       const payload = { action: 'add', id, amount, merchant, date, cat: selectedCat };
-      await sheetsPost(payload);
+      // Optimistic update — update UI immediately
       expenses.push({ id, amount, merchant, date, cat: selectedCat });
       clearForm();
       setSyncStatus('ok', `Synced · ${expenses.length} entries`);
       showToast('Expense saved!');
+      // Send to Sheets in background
+      sheetsPost(payload).catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
     }
   } catch(e) {
     setSyncStatus('error', 'Save failed — tap ↻ to retry');
