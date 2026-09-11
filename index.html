@@ -484,22 +484,33 @@ async function handleReceiptImage(event) {
   document.getElementById('scan-overlay').classList.add('open');
   try {
     const base64 = await fileToBase64(file);
-    const response = await fetch(RECEIPT_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-          { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge. IMPORTANT: This user is based in Singapore — always interpret ambiguous dates (e.g. 07/08/2026) as DD/MM/YYYY format, never MM/DD/YYYY. Convert all dates to YYYY-MM-DD format. Date year if missing = ${new Date().getFullYear()}.` }
-        ]}]
-      })
-    });
-    const data = await response.json();
-    // Debug — show raw response
-    const debugText = JSON.stringify(data).substring(0, 200);
-    showToast(debugText);
+    showToast('Image compressed OK, sending...');
+    await new Promise(r => setTimeout(r, 1500));
+    let response, data;
+    try {
+      response = await fetch(RECEIPT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+            { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge. IMPORTANT: This user is based in Singapore — always interpret ambiguous dates (e.g. 07/08/2026) as DD/MM/YYYY format, never MM/DD/YYYY. Convert all dates to YYYY-MM-DD format. Date year if missing = ${new Date().getFullYear()}.` }
+          ]}]
+        })
+      });
+    } catch(fetchErr) {
+      throw new Error('Fetch failed: ' + fetchErr.message);
+    }
+    showToast('Got response: ' + response.status);
+    await new Promise(r => setTimeout(r, 1500));
+    try {
+      data = await response.json();
+    } catch(jsonErr) {
+      throw new Error('JSON parse failed: ' + jsonErr.message);
+    }
+    showToast(JSON.stringify(data).substring(0, 150));
     await new Promise(r => setTimeout(r, 4000));
     let parsed;
     try {
@@ -512,9 +523,9 @@ async function handleReceiptImage(event) {
       } else if (data.text) {
         rawText = data.text;
       }
-      if (!rawText) throw new Error('Empty response');
+      if (!rawText) throw new Error('Empty response: ' + JSON.stringify(data).substring(0,100));
       parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
-    } catch(e) { throw new Error('Could not read receipt — please fill in manually'); }
+    } catch(e) { throw new Error('Parse failed: ' + e.message); }
     if (parsed.amount && parsed.amount > 0) { amountInput.value = parsed.amount; amountDisplay.textContent = '$' + parseFloat(parsed.amount).toFixed(2); amountDisplay.classList.remove('placeholder'); }
     if (parsed.merchant) { const mi = document.getElementById('merchant'); mi.value = parsed.merchant; mi.classList.add('ai-filled'); onMerchantInput(); }
     if (parsed.date) { const di = document.getElementById('date'); di.value = parsed.date; di.classList.add('ai-filled'); updateDateDisplay(); }
