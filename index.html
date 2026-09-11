@@ -155,18 +155,6 @@
   .modal-btn { flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; }
   .modal-btn.cancel { background: var(--surface2); color: var(--muted); }
   .modal-btn.confirm { background: var(--accent); color: #0f0f0f; }
-  .export-modal-content { text-align: center; padding: 8px 0 4px; }
-  .export-modal-icon { font-size: 36px; margin-bottom: 12px; }
-  .export-modal-title { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 8px; }
-  .export-modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
-  .export-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
-  .export-option-btn { width: 100%; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; display: flex; align-items: center; gap: 10px; }
-  .export-option-btn.csv { background: var(--accent); color: #0f0f0f; }
-  .export-option-btn.csv svg { stroke: #0f0f0f; }
-  .export-option-btn.copy { background: var(--surface2); color: var(--text); }
-  .export-option-btn.copy svg { stroke: var(--text); }
-  .export-option-btn svg { width: 18px; height: 18px; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
-  .skip-btn { width: 100%; padding: 12px; background: transparent; border: none; color: var(--muted); font-size: 14px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
   .cat-edit-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 320px; overflow-y: auto; }
   .cat-edit-item { display: flex; align-items: center; gap: 8px; background: var(--surface2); border-radius: 10px; padding: 8px 10px; }
   .cat-edit-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -714,10 +702,9 @@ async function deleteExpense(id) {
 // ── EXPORT ────────────────────────────────────────────────────
 function exportCSV() {
   if (!expenses || expenses.length === 0) { showToast('No expenses to export yet'); return; }
-  let csv = 'Date,Amount (SGD),Merchant,Category\n';
+  let csv = 'ID,Date,Amount (SGD),Merchant,Category\n';
   [...expenses].sort((a,b) => new Date(a.date)-new Date(b.date)).forEach(e => {
-    const ds = new Date(e.date).toLocaleDateString('en-SG', {day:'2-digit', month:'short', year:'numeric'});
-    csv += `${ds},${e.amount.toFixed(2)},"${e.merchant}","${e.cat}"\n`;
+    csv += `${e.id},${e.date},${e.amount.toFixed(2)},"${e.merchant}","${e.cat}"\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob), a = document.createElement('a'), now = new Date();
