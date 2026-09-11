@@ -341,7 +341,7 @@
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────
-const SHEETS_API = 'https://script.google.com/macros/s/AKfycbwh-rzFLVuIJdEcG5ssvdCXef4ZOhctIkRJUV-doJx47IlauGUrdNOi87xQJGNLHTg8/exec';
+const SHEETS_API = 'https://sheets-proxy.paksuan.workers.dev/';
 const RECEIPT_API = 'https://receipt-proxy.paksuan.workers.dev/';
 const CAT_COLORS = ['#f7c948','#6ec9f0','#f06e9e','#6ef0b8','#f0906e','#a06ef0','#6e9ef0','#f0d46e','#e06ef0','#6ef0d4'];
 const DEFAULT_CATS = ['Dining','Shopping','Transport','Groceries','Entertainment','Travel','Utilities','Healthcare','Food Delivery','Pets','Coffee','Subscription'];
@@ -359,7 +359,10 @@ let isSyncing = false;
 
 // ── GOOGLE SHEETS API ─────────────────────────────────────────
 async function sheetsGet() {
-  const res = await fetch(SHEETS_API);
+  const res = await fetch(SHEETS_API, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
   return res.json();
 }
 
