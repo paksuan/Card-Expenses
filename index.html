@@ -478,6 +478,8 @@ function clearReceipt() {
 
 async function handleReceiptImage(event) {
   const file = event.target.files[0]; if (!file) return;
+  showToast('File selected: ' + file.name + ' ' + file.type + ' ' + file.size);
+  await new Promise(r => setTimeout(r, 3000));
   const previewReader = new FileReader();
   previewReader.onload = (e) => { document.getElementById('receipt-img').src = e.target.result; document.getElementById('receipt-preview').style.display = 'block'; };
   previewReader.readAsDataURL(file);
