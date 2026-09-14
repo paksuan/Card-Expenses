@@ -358,6 +358,16 @@ dashMonth = new Date(dashMonth.getFullYear(), dashMonth.getMonth(), 1);
 let isSyncing = false;
 
 // ── GOOGLE SHEETS API ─────────────────────────────────────────
+const CACHE_KEY = 'exp_cache';
+
+function saveCache(data) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch(e) { return null; }
+}
+
 async function sheetsGet() {
   const res = await fetch(SHEETS_API, {
     method: 'GET',
@@ -383,7 +393,20 @@ function setSyncStatus(status, text) {
 }
 
 async function loadFromSheets() {
-  setSyncStatus('syncing', 'Syncing with Google Sheets...');
+  // Load from cache instantly first
+  const cache = loadCache();
+  if (cache && cache.expenses && cache.expenses.length > 0) {
+    expenses = cache.expenses;
+    if (cache.cats && cache.cats.length > 0) cats = cache.cats;
+    setSyncStatus('syncing', `Loading · ${expenses.length} cached entries...`);
+    renderCatGrid();
+    const activeView = document.querySelector('.view.active');
+    if (activeView && activeView.id === 'view-dash') renderDash();
+  } else {
+    setSyncStatus('syncing', 'Syncing with Google Sheets...');
+  }
+
+  // Then fetch fresh data from Sheets in background
   try {
     const data = await sheetsGet();
     if (data.success) {
@@ -395,6 +418,8 @@ async function loadFromSheets() {
         cat: e.cat
       }));
       if (data.cats && data.cats.length > 0) cats = data.cats;
+      // Save to cache for next load
+      saveCache({ expenses, cats });
       setSyncStatus('ok', `Synced · ${expenses.length} entries`);
       renderCatGrid();
       const activeView = document.querySelector('.view.active');
@@ -403,7 +428,11 @@ async function loadFromSheets() {
       throw new Error(data.error || 'Unknown error');
     }
   } catch(e) {
-    setSyncStatus('error', 'Sync failed — tap ↻ to retry');
+    if (expenses.length > 0) {
+      setSyncStatus('error', 'Showing cached data — tap ↻ to retry');
+    } else {
+      setSyncStatus('error', 'Sync failed — tap ↻ to retry');
+    }
   }
 }
 
@@ -718,6 +747,7 @@ async function saveExpense() {
       const payload = { action: 'add', id, amount, merchant, date, cat: selectedCat };
       // Optimistic update — update UI immediately
       expenses.push({ id, amount, merchant, date, cat: selectedCat });
+      saveCache({ expenses, cats });
       clearForm();
       setSyncStatus('ok', `Synced · ${expenses.length} entries`);
       showToast('Expense saved!');
