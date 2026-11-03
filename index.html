@@ -315,6 +315,17 @@
   </div>
 </div>
 
+<!-- Passcode modal -->
+<div class="modal-bg" id="pass-modal">
+  <div class="modal">
+    <div class="modal-title">Enter passcode</div>
+    <input type="password" id="pass-input" placeholder="Passcode" autocomplete="off" onkeydown="if(event.key==='Enter') savePasscode()">
+    <div class="modal-btns">
+      <button class="modal-btn confirm" onclick="savePasscode()">Unlock</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add category modal -->
 <div class="modal-bg" id="cat-modal">
   <div class="modal">
@@ -368,21 +379,63 @@ function loadCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch(e) { return null; }
 }
 
+// ── PASSCODE (never stored in the public code — typed once per device) ──
+const PASS_KEY = 'exp_pass';
+function getPasscode() { try { return localStorage.getItem(PASS_KEY) || ''; } catch(e) { return ''; } }
+function openPassModal() {
+  document.getElementById('pass-modal').classList.add('open');
+  setTimeout(() => document.getElementById('pass-input').focus(), 300);
+}
+function savePasscode() {
+  const v = document.getElementById('pass-input').value.trim();
+  if (!v) return;
+  try { localStorage.setItem(PASS_KEY, v); } catch(e) {}
+  document.getElementById('pass-input').value = '';
+  document.getElementById('pass-modal').classList.remove('open');
+  loadFromSheets();
+}
+function handleUnauthorized() {
+  try { localStorage.removeItem(PASS_KEY); } catch(e) {}
+  setSyncStatus('error', 'Passcode needed');
+  showToast('Wrong or missing passcode');
+  openPassModal();
+}
+
+// Convert any date shape the feed may return into YYYY-MM-DD (Singapore time)
+function normDate(v) {
+  if (!v) return '';
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
+function authHeaders() {
+  return { 'Content-Type': 'application/json', 'X-Passcode': getPasscode() };
+}
+
 async function sheetsGet() {
-  const res = await fetch(SHEETS_API, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' }
-  });
-  return res.json();
+  if (!getPasscode()) { openPassModal(); throw new Error('No passcode'); }
+  const res = await fetch(SHEETS_API, { method: 'GET', headers: authHeaders() });
+  const data = await res.json();
+  if (res.status === 401 || data.error === 'Unauthorized') { handleUnauthorized(); throw new Error('Unauthorized'); }
+  return data;
 }
 
 async function sheetsPost(payload) {
-  const res = await fetch(SHEETS_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return res.json();
+  if (!getPasscode()) { openPassModal(); throw new Error('No passcode'); }
+  const res = await fetch(SHEETS_API, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (res.status === 401 || data.error === 'Unauthorized') { handleUnauthorized(); throw new Error('Unauthorized'); }
+  if (!data.success) throw new Error(data.error || 'Sheets error');
+  return data;
+}
+
+// For callers with no try/catch of their own: never fail silently
+async function sheetsPostSafe(payload) {
+  try { return await sheetsPost(payload); }
+  catch(e) { setSyncStatus('error', 'Sync issue — tap ↻ to verify'); return null; }
 }
 
 function setSyncStatus(status, text) {
@@ -414,7 +467,7 @@ async function loadFromSheets() {
         id: String(e.id),
         amount: parseFloat(e.amount),
         merchant: e.merchant,
-        date: e.date,
+        date: normDate(e.date),
         cat: e.cat
       }));
       if (data.cats && data.cats.length > 0) cats = data.cats;
@@ -617,7 +670,7 @@ async function confirmNewCat() {
   const val = document.getElementById('new-cat-input').value.trim(); if (!val) return;
   if (!cats.includes(val)) {
     cats.push(val);
-    await sheetsPost({ action: 'updateCats', cats });
+    await sheetsPostSafe({ action: 'updateCats', cats });
   }
   selectedCat = val; closeCatModal(); renderCatGrid();
 }
@@ -665,12 +718,12 @@ async function saveManageCats() {
   for (const exp of expenses) {
     if (renames[exp.cat]) {
       exp.cat = renames[exp.cat];
-      await sheetsPost({ action: 'update', ...exp });
+      await sheetsPostSafe({ action: 'update', ...exp });
     }
   }
 
   cats = newCats;
-  await sheetsPost({ action: 'updateCats', cats });
+  await sheetsPostSafe({ action: 'updateCats', cats });
   if (selectedCat && !cats.includes(selectedCat)) selectedCat = null;
   closeManageCatsModal(); renderCatGrid(); showToast('Categories updated!');
 }
