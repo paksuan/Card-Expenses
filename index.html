@@ -353,7 +353,7 @@
 <script>
 // ── CONFIG ────────────────────────────────────────────────────
 const SHEETS_API = 'https://sheets-proxy.paksuan.workers.dev/';
-const RECEIPT_API = 'https://receipt-proxy.paksuan.workers.dev/';
+const RECEIPT_API = 'https://receipt-scan.paksuan.workers.dev/';
 const CAT_COLORS = ['#f7c948','#6ec9f0','#f06e9e','#6ef0b8','#f0906e','#a06ef0','#6e9ef0','#f0d46e','#e06ef0','#6ef0d4'];
 const DEFAULT_CATS = ['Dining','Shopping','Transport','Groceries','Entertainment','Travel','Utilities','Healthcare','Food Delivery','Pets','Coffee','Subscription'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -567,10 +567,11 @@ async function handleReceiptImage(event) {
   try {
     const base64 = await fileToBase64(file);
     let response, data;
+    if (!getPasscode()) { openPassModal(); throw new Error('Passcode needed — enter it and rescan'); }
     try {
       response = await fetch(RECEIPT_API, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           model: 'claude-sonnet-4-5',
           max_tokens: 1000,
@@ -587,6 +588,10 @@ async function handleReceiptImage(event) {
       data = await response.json();
     } catch(jsonErr) {
       throw new Error('Could not read receipt — please fill in manually');
+    }
+    if (response.status === 401 || (data && data.error === 'Unauthorized')) {
+      handleUnauthorized();
+      throw new Error('Passcode needed — enter it and rescan');
     }
     let parsed;
     try {
