@@ -161,11 +161,29 @@
   .cat-edit-input { flex: 1; background: transparent; border: none; font-size: 14px; color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; padding: 2px 0; border-bottom: 1px solid transparent; transition: border-color 0.2s; }
   .cat-edit-input:focus { border-bottom-color: var(--accent); }
   .cat-edit-delete { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,107,107,0.15); border: none; color: var(--danger); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  /* Wallet pending */
+  #wallet-pending { padding: 16px 20px 0; display: none; }
+  #wallet-pending.show { display: block; }
+  .wp-head { font-size: 12px; font-weight: 500; color: var(--accent); margin-bottom: 8px; letter-spacing: 0.02em; }
+  .wp-card { background: var(--surface); border: 1px solid rgba(201,240,110,0.25); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .wp-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .wp-merchant { font-size: 15px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wp-amt { font-size: 15px; color: var(--text); font-weight: 500; }
+  .wp-meta { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
+  .wp-dup { font-size: 11px; color: var(--warn); background: rgba(247,201,72,0.08); border: 1px solid rgba(247,201,72,0.3); border-radius: 8px; padding: 6px 8px; margin-bottom: 8px; }
+  .wp-row { display: flex; gap: 8px; align-items: center; }
+  .wp-sel { flex: 1; min-width: 0; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; padding: 8px; font-family: 'DM Sans', sans-serif; }
+  .wp-btn { border: none; border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+  .wp-save { background: var(--accent); color: #0f0f0f; }
+  .wp-edit { background: var(--surface2); color: var(--text); }
+  .wp-x { background: transparent; color: var(--muted); }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="content">
+    <div id="wallet-pending"></div>
 
     <!-- ADD / EDIT VIEW -->
     <div class="view active" id="view-add">
@@ -472,6 +490,8 @@ async function loadFromSheets() {
         cat: e.cat
       }));
       if (data.cats && data.cats.length > 0) cats = data.cats;
+      pendingWallet = (data.pending || []).map(p => ({ ...p, id: String(p.id), date: normDate(p.date), amount: p.amount == null ? null : parseFloat(p.amount) }));
+      renderPending();
       // Save to cache for next load
       saveCache({ expenses, cats });
       setSyncStatus('ok', `Synced · ${expenses.length} entries`);
@@ -489,6 +509,89 @@ async function loadFromSheets() {
     }
   }
 }
+
+
+// ── WALLET PENDING ────────────────────────────────────────────
+let pendingWallet = [];
+let pendingWalletId = null; // inbox id being completed via the Add form
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function walletDup(p) {
+  if (p.amount == null) return null;
+  const d = new Date(p.date);
+  return expenses.find(e => Math.abs(e.amount - p.amount) < 0.005 && Math.abs(new Date(e.date) - d) <= 86400000) || null;
+}
+function renderPending() {
+  const box = document.getElementById('wallet-pending');
+  if (!pendingWallet.length || editingId) { box.classList.remove('show'); box.innerHTML = ''; return; }
+  let html = `<div class="wp-head">Wallet · ${pendingWallet.length} to review</div>`;
+  pendingWallet.forEach(p => {
+    const ok = p.status === 'new' && p.amount != null;
+    const dup = walletDup(p);
+    const dateTxt = p.date ? new Date(p.date).toLocaleDateString('en-SG', {day:'numeric', month:'short'}) : '';
+    const amtTxt = p.amount != null ? (p.currency && p.currency !== 'SGD' ? escHtml(p.currency) + ' ' : '$') + p.amount.toFixed(2) : '?';
+    const title = ok || p.merchant ? escHtml(p.merchant || p.subtitle) : escHtml(p.subtitle || p.title);
+    const note = p.status === 'unparsed' ? 'Could not read this one: ' + escHtml(p.title + ' | ' + p.subtitle + ' | ' + p.body)
+               : p.status === 'check-currency' ? 'Not SGD. Tap Edit and enter the SGD amount from your statement.' : '';
+    const opts = cats.map(c => `<option value="${escHtml(c)}"${c === p.cat ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
+    html += `<div class="wp-card" data-id="${escHtml(p.id)}">
+      <div class="wp-top"><span class="wp-merchant">${title}</span><span class="wp-amt">${amtTxt}</span></div>
+      <div class="wp-meta">${dateTxt}${p.title ? ' · ' + escHtml(p.title) : ''}</div>
+      ${note ? `<div class="wp-dup">${note}</div>` : ''}
+      ${dup ? `<div class="wp-dup">Looks already logged: $${dup.amount.toFixed(2)} at ${escHtml(dup.merchant)} on ${new Date(dup.date).toLocaleDateString('en-SG', {day:'numeric', month:'short'})}. Dismiss unless it is a separate purchase.</div>` : ''}
+      <div class="wp-row">
+        ${ok ? `<select class="wp-sel" id="wp-cat-${escHtml(p.id)}"><option value="">Category…</option>${opts}</select>
+        <button class="wp-btn wp-save" onclick="saveWallet('${escHtml(p.id)}')">${dup ? 'Save anyway' : 'Save'}</button>` : ''}
+        <button class="wp-btn wp-edit" onclick="editWallet('${escHtml(p.id)}')">Edit</button>
+        <button class="wp-btn wp-x" onclick="dismissWallet('${escHtml(p.id)}')">Dismiss</button>
+      </div></div>`;
+  });
+  box.innerHTML = html;
+  box.classList.add('show');
+}
+async function saveWallet(inboxId) {
+  const p = pendingWallet.find(x => x.id === inboxId); if (!p) return;
+  const sel = document.getElementById('wp-cat-' + inboxId);
+  const cat = sel && sel.value;
+  if (!cat) { showToast('Pick a category first'); return; }
+  const id = String(Date.now());
+  expenses.push({ id, amount: p.amount, merchant: p.merchant, date: p.date, cat });
+  pendingWallet = pendingWallet.filter(x => x.id !== inboxId);
+  saveCache({ expenses, cats });
+  renderPending();
+  const av = document.querySelector('.view.active'); if (av && av.id === 'view-dash') renderDash();
+  setSyncStatus('ok', `Synced · ${expenses.length} entries`);
+  showToast('Saved from Wallet');
+  sheetsPost({ action: 'walletSave', inboxId, id, amount: p.amount, merchant: p.merchant, date: p.date, cat })
+    .catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
+}
+async function dismissWallet(inboxId) {
+  pendingWallet = pendingWallet.filter(x => x.id !== inboxId);
+  renderPending();
+  showToast('Dismissed');
+  sheetsPost({ action: 'walletDismiss', inboxId }).catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
+}
+function editWallet(inboxId) {
+  const p = pendingWallet.find(x => x.id === inboxId); if (!p) return;
+  switchTab('add');
+  pendingWalletId = inboxId;
+  document.getElementById('form-title').textContent = 'Review Wallet entry';
+  document.getElementById('form-sub').textContent = 'Fix the details, then save';
+  const amt = p.amount != null && (!p.currency || p.currency === 'SGD') ? p.amount : '';
+  amountInput.value = amt;
+  amountDisplay.textContent = amt !== '' ? '$' + Number(amt).toFixed(2) : '$0.00';
+  amountDisplay.classList.toggle('placeholder', amt === '');
+  document.getElementById('merchant').value = p.merchant || p.subtitle || '';
+  document.getElementById('date').value = p.date || '';
+  updateDateDisplay();
+  selectedCat = p.cat || null; renderCatGrid();
+  renderPending();
+  document.getElementById('content').scrollTo(0, 0);
+}
+// Refresh when the home-screen app is reopened
+let lastResume = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - lastResume > 20000) { lastResume = Date.now(); loadFromSheets(); }
+});
 
 // ── SMART CATEGORY SUGGESTION ─────────────────────────────────
 function onMerchantInput() {
@@ -515,9 +618,9 @@ function checkDuplicate() {
   const merchant = document.getElementById('merchant').value.trim().toLowerCase();
   const amount = parseFloat(document.getElementById('amount-input').value);
   const date = document.getElementById('date').value;
-  if (!merchant || !amount || !date || editingId) { document.getElementById('dup-warning').classList.remove('show'); return; }
+  if (!amount || !date || editingId) { document.getElementById('dup-warning').classList.remove('show'); return; }
   const inputDate = new Date(date);
-  const dup = expenses.find(e => e.merchant.toLowerCase() === merchant && e.amount === amount && Math.abs(new Date(e.date) - inputDate) <= 86400000);
+  const dup = expenses.find(e => Math.abs(e.amount - amount) < 0.005 && Math.abs(new Date(e.date) - inputDate) <= 86400000);
   if (dup) {
     const dupDate = new Date(dup.date).toLocaleDateString('en-SG', {day:'numeric', month:'short'});
     document.getElementById('dup-warning-text').textContent = `Already logged $${dup.amount.toFixed(2)} at ${dup.merchant} on ${dupDate}`;
@@ -530,6 +633,7 @@ function editExpense(id) {
   const e = expenses.find(exp => String(exp.id) === String(id));
   if (!e) return;
   editingId = String(id);
+  renderPending();
   switchTab('add');
   document.getElementById('edit-banner').classList.add('show');
   document.getElementById('scan-section').style.display = 'none';
@@ -762,7 +866,7 @@ function setToday() {
 
 // ── CLEAR FORM ────────────────────────────────────────────────
 function clearForm() {
-  editingId = null; suggestedCat = null;
+  editingId = null; suggestedCat = null; pendingWalletId = null;
   amountInput.value = ''; amountDisplay.textContent = '$0.00'; amountDisplay.classList.add('placeholder');
   document.getElementById('merchant').value = '';
   document.querySelectorAll('.ai-filled').forEach(el => el.classList.remove('ai-filled'));
@@ -774,6 +878,7 @@ function clearForm() {
   document.getElementById('form-sub').textContent = 'Scan a receipt or enter manually';
   document.getElementById('save-btn').textContent = 'Save Expense';
   clearReceipt(); setToday(); selectedCat = null; renderCatGrid();
+  renderPending();
   showToast('Form cleared');
 }
 
@@ -804,12 +909,18 @@ async function saveExpense() {
     } else {
       const id = String(Date.now());
       const payload = { action: 'add', id, amount, merchant, date, cat: selectedCat };
+      if (pendingWalletId) {
+        payload.action = 'walletSave'; payload.inboxId = pendingWalletId;
+        pendingWallet = pendingWallet.filter(x => x.id !== pendingWalletId);
+        pendingWalletId = null;
+      }
       // Optimistic update — update UI immediately
       expenses.push({ id, amount, merchant, date, cat: selectedCat });
       saveCache({ expenses, cats });
       clearForm();
       setSyncStatus('ok', `Synced · ${expenses.length} entries`);
       showToast('Expense saved!');
+      renderPending();
       // Send to Sheets in background
       sheetsPost(payload).catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
     }
@@ -1009,7 +1120,7 @@ function copySummary() {
 }
 
 // ── INIT ──────────────────────────────────────────────────────
-const APP_VERSION = 'v2026-11-11 · receipt-scan';
+const APP_VERSION = 'v2026-11-16 · wallet-review';
 document.getElementById('app-version').textContent = APP_VERSION;
 setToday();
 renderCatGrid();
