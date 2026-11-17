@@ -163,21 +163,14 @@
   .cat-edit-delete { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,107,107,0.15); border: none; color: var(--danger); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
   /* Wallet pending */
-  #wallet-pending { padding: 16px 20px 0; display: none; }
-  #wallet-pending.show { display: block; }
-  .wp-head { font-size: 12px; font-weight: 500; color: var(--accent); margin-bottom: 8px; letter-spacing: 0.02em; }
-  .wp-card { background: var(--surface); border: 1px solid rgba(201,240,110,0.25); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-  .wp-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .wp-merchant { font-size: 15px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .wp-amt { font-size: 15px; color: var(--text); font-weight: 500; }
-  .wp-meta { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
-  .wp-dup { font-size: 11px; color: var(--warn); background: rgba(247,201,72,0.08); border: 1px solid rgba(247,201,72,0.3); border-radius: 8px; padding: 6px 8px; margin-bottom: 8px; }
-  .wp-row { display: flex; gap: 8px; align-items: center; }
-  .wp-sel { flex: 1; min-width: 0; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; padding: 8px; font-family: 'DM Sans', sans-serif; }
-  .wp-btn { border: none; border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; }
-  .wp-save { background: var(--accent); color: #0f0f0f; }
-  .wp-edit { background: var(--surface2); color: var(--text); }
-  .wp-x { background: transparent; color: var(--muted); }
+  #wallet-pending { display: none; margin: 16px 20px 0; padding: 10px 14px; background: rgba(201,240,110,0.1); border: 1px solid rgba(201,240,110,0.3); border-radius: 12px; align-items: center; justify-content: space-between; }
+  #wallet-pending.show { display: flex; }
+  .wp-text { font-size: 13px; color: var(--accent); font-weight: 500; }
+  .wp-go { font-size: 12px; font-weight: 500; color: #0f0f0f; background: var(--accent); border: none; border-radius: 8px; padding: 6px 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+  .wallet-banner { background: rgba(201,240,110,0.1); border: 1px solid rgba(201,240,110,0.3); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; display: none; }
+  .wallet-banner.show { display: block; }
+  .wallet-banner-row { display: flex; align-items: center; justify-content: space-between; }
+  .wallet-banner-note { font-size: 11px; color: var(--muted); margin-top: 4px; word-break: break-word; }
 </style>
 </head>
 <body>
@@ -201,6 +194,15 @@
       <div class="edit-banner" id="edit-banner">
         <span class="edit-banner-text">✏️ Editing existing entry</span>
         <span class="edit-banner-cancel" onclick="cancelEdit()">Cancel</span>
+      </div>
+
+      <!-- Wallet review banner -->
+      <div class="wallet-banner" id="wallet-banner">
+        <div class="wallet-banner-row">
+          <span class="edit-banner-text" id="wallet-banner-title">Wallet entry</span>
+          <span><span class="edit-banner-cancel" onclick="skipWallet()">Later</span><span class="edit-banner-cancel" onclick="dismissCurrentWallet()">Dismiss</span></span>
+        </div>
+        <div class="wallet-banner-note" id="wallet-banner-note"></div>
       </div>
 
       <!-- Receipt scan -->
@@ -513,8 +515,8 @@ async function loadFromSheets() {
 
 // ── WALLET PENDING ────────────────────────────────────────────
 let pendingWallet = [];
-let pendingWalletId = null; // inbox id being completed via the Add form
-function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let pendingWalletId = null;  // inbox id loaded in the Add form
+let walletSession = false;   // true while stepping through pending entries
 function walletDup(p) {
   if (p.amount == null) return null;
   const d = new Date(p.date);
@@ -522,71 +524,55 @@ function walletDup(p) {
 }
 function renderPending() {
   const box = document.getElementById('wallet-pending');
-  if (!pendingWallet.length || editingId) { box.classList.remove('show'); box.innerHTML = ''; return; }
-  let html = `<div class="wp-head">Wallet · ${pendingWallet.length} to review</div>`;
-  pendingWallet.forEach(p => {
-    const ok = p.status === 'new' && p.amount != null;
-    const dup = walletDup(p);
-    const dateTxt = p.date ? new Date(p.date).toLocaleDateString('en-SG', {day:'numeric', month:'short'}) : '';
-    const amtTxt = p.amount != null ? (p.currency && p.currency !== 'SGD' ? escHtml(p.currency) + ' ' : '$') + p.amount.toFixed(2) : '?';
-    const title = ok || p.merchant ? escHtml(p.merchant || p.subtitle) : escHtml(p.subtitle || p.title);
-    const note = p.status === 'unparsed' ? 'Could not read this one: ' + escHtml(p.title + ' | ' + p.subtitle + ' | ' + p.body)
-               : p.status === 'check-currency' ? 'Not SGD. Tap Edit and enter the SGD amount from your statement.' : '';
-    const opts = cats.map(c => `<option value="${escHtml(c)}"${c === p.cat ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
-    html += `<div class="wp-card" data-id="${escHtml(p.id)}">
-      <div class="wp-top"><span class="wp-merchant">${title}</span><span class="wp-amt">${amtTxt}</span></div>
-      <div class="wp-meta">${dateTxt}${p.title ? ' · ' + escHtml(p.title) : ''}</div>
-      ${note ? `<div class="wp-dup">${note}</div>` : ''}
-      ${dup ? `<div class="wp-dup">Looks already logged: $${dup.amount.toFixed(2)} at ${escHtml(dup.merchant)} on ${new Date(dup.date).toLocaleDateString('en-SG', {day:'numeric', month:'short'})}. Dismiss unless it is a separate purchase.</div>` : ''}
-      <div class="wp-row">
-        ${ok ? `<select class="wp-sel" id="wp-cat-${escHtml(p.id)}"><option value="">Category…</option>${opts}</select>
-        <button class="wp-btn wp-save" onclick="saveWallet('${escHtml(p.id)}')">${dup ? 'Save anyway' : 'Save'}</button>` : ''}
-        <button class="wp-btn wp-edit" onclick="editWallet('${escHtml(p.id)}')">Edit</button>
-        <button class="wp-btn wp-x" onclick="dismissWallet('${escHtml(p.id)}')">Dismiss</button>
-      </div></div>`;
-  });
-  box.innerHTML = html;
+  if (!pendingWallet.length || editingId || pendingWalletId) { box.classList.remove('show'); box.innerHTML = ''; return; }
+  const n = pendingWallet.length;
+  box.innerHTML = `<span class="wp-text">Wallet · ${n} ${n === 1 ? 'entry' : 'entries'} to review</span><button class="wp-go" onclick="startWalletReview()">Review</button>`;
   box.classList.add('show');
 }
-async function saveWallet(inboxId) {
-  const p = pendingWallet.find(x => x.id === inboxId); if (!p) return;
-  const sel = document.getElementById('wp-cat-' + inboxId);
-  const cat = sel && sel.value;
-  if (!cat) { showToast('Pick a category first'); return; }
-  const id = String(Date.now());
-  expenses.push({ id, amount: p.amount, merchant: p.merchant, date: p.date, cat });
-  pendingWallet = pendingWallet.filter(x => x.id !== inboxId);
-  saveCache({ expenses, cats });
-  renderPending();
-  const av = document.querySelector('.view.active'); if (av && av.id === 'view-dash') renderDash();
-  setSyncStatus('ok', `Synced · ${expenses.length} entries`);
-  showToast('Saved from Wallet');
-  sheetsPost({ action: 'walletSave', inboxId, id, amount: p.amount, merchant: p.merchant, date: p.date, cat })
-    .catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
-}
-async function dismissWallet(inboxId) {
-  pendingWallet = pendingWallet.filter(x => x.id !== inboxId);
-  renderPending();
-  showToast('Dismissed');
-  sheetsPost({ action: 'walletDismiss', inboxId }).catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
-}
-function editWallet(inboxId) {
-  const p = pendingWallet.find(x => x.id === inboxId); if (!p) return;
+function startWalletReview() { walletSession = true; loadNextWallet(); }
+function loadNextWallet() {
+  const p = pendingWallet[0];
+  if (!p) { walletSession = false; renderPending(); return; }
   switchTab('add');
-  pendingWalletId = inboxId;
+  pendingWalletId = p.id;
+  document.getElementById('edit-banner').classList.remove('show');
+  const idx = pendingWallet.length;
+  document.getElementById('wallet-banner-title').textContent = `Wallet entry · ${idx} left`;
+  let note = (p.title ? p.title + ' · ' : '') + (p.subtitle || '') + (p.body ? ' · ' + p.body : '');
+  if (p.status === 'check-currency') note += ' — not SGD, enter the SGD amount';
+  if (p.status === 'unparsed') note += ' — could not be read, fill in manually';
+  document.getElementById('wallet-banner-note').textContent = note;
+  document.getElementById('wallet-banner').classList.add('show');
+  document.getElementById('scan-section').style.display = 'none';
   document.getElementById('form-title').textContent = 'Review Wallet entry';
-  document.getElementById('form-sub').textContent = 'Fix the details, then save';
-  const amt = p.amount != null && (!p.currency || p.currency === 'SGD') ? p.amount : '';
+  document.getElementById('form-sub').textContent = 'Check the details, then save';
+  document.getElementById('save-btn').textContent = 'Save Expense';
+  const amt = p.status === 'new' && p.amount != null ? p.amount : '';
   amountInput.value = amt;
   amountDisplay.textContent = amt !== '' ? '$' + Number(amt).toFixed(2) : '$0.00';
   amountDisplay.classList.toggle('placeholder', amt === '');
   document.getElementById('merchant').value = p.merchant || p.subtitle || '';
   document.getElementById('date').value = p.date || '';
   updateDateDisplay();
-  selectedCat = p.cat || null; renderCatGrid();
+  selectedCat = p.cat && cats.includes(p.cat) ? p.cat : null; renderCatGrid();
+  checkDuplicate();
   renderPending();
   document.getElementById('content').scrollTo(0, 0);
 }
+function afterWalletStep() {
+  if (walletSession && pendingWallet.length) { setTimeout(loadNextWallet, 0); }
+  else { walletSession = false; renderPending(); }
+}
+function dismissCurrentWallet() {
+  const id = pendingWalletId; if (!id) return;
+  pendingWallet = pendingWallet.filter(x => x.id !== id);
+  sheetsPost({ action: 'walletDismiss', inboxId: id }).catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
+  pendingWalletId = null;
+  clearForm(true);
+  showToast('Dismissed');
+  afterWalletStep();
+}
+function skipWallet() { pendingWalletId = null; walletSession = false; clearForm(true); renderPending(); }
 // Refresh when the home-screen app is reopened
 let lastResume = 0;
 document.addEventListener('visibilitychange', () => {
@@ -865,8 +851,9 @@ function setToday() {
 }
 
 // ── CLEAR FORM ────────────────────────────────────────────────
-function clearForm() {
+function clearForm(silent) {
   editingId = null; suggestedCat = null; pendingWalletId = null;
+  document.getElementById('wallet-banner').classList.remove('show');
   amountInput.value = ''; amountDisplay.textContent = '$0.00'; amountDisplay.classList.add('placeholder');
   document.getElementById('merchant').value = '';
   document.querySelectorAll('.ai-filled').forEach(el => el.classList.remove('ai-filled'));
@@ -879,7 +866,7 @@ function clearForm() {
   document.getElementById('save-btn').textContent = 'Save Expense';
   clearReceipt(); setToday(); selectedCat = null; renderCatGrid();
   renderPending();
-  showToast('Form cleared');
+  if (silent !== true) showToast('Form cleared');
 }
 
 // ── SAVE / UPDATE ─────────────────────────────────────────────
@@ -909,7 +896,9 @@ async function saveExpense() {
     } else {
       const id = String(Date.now());
       const payload = { action: 'add', id, amount, merchant, date, cat: selectedCat };
+      let fromWallet = false;
       if (pendingWalletId) {
+        fromWallet = true;
         payload.action = 'walletSave'; payload.inboxId = pendingWalletId;
         pendingWallet = pendingWallet.filter(x => x.id !== pendingWalletId);
         pendingWalletId = null;
@@ -920,7 +909,7 @@ async function saveExpense() {
       clearForm();
       setSyncStatus('ok', `Synced · ${expenses.length} entries`);
       showToast('Expense saved!');
-      renderPending();
+      if (fromWallet) afterWalletStep(); else renderPending();
       // Send to Sheets in background
       sheetsPost(payload).catch(() => setSyncStatus('error', 'Sync issue — tap ↻ to verify'));
     }
@@ -1120,7 +1109,7 @@ function copySummary() {
 }
 
 // ── INIT ──────────────────────────────────────────────────────
-const APP_VERSION = 'v2026-11-16 · wallet-review';
+const APP_VERSION = 'v2026-11-17 · wallet-form';
 document.getElementById('app-version').textContent = APP_VERSION;
 setToday();
 renderCatGrid();
