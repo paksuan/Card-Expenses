@@ -668,7 +668,7 @@ async function handleReceiptImage(event) {
           max_tokens: 1000,
           messages: [{ role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-            { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge.\n\nCRITICAL DATE RULE: This user is in Singapore (UTC+8). ALL dates must be interpreted as DD/MM/YY or DD/MM/YYYY format — NEVER as MM/DD format. Examples:\n- "8/9/26" = 8 September 2026 = 2026-09-08 (NOT August 9)\n- "07/08/2026" = 7 August 2026 = 2026-08-07 (NOT July 8)\n- "1/12/26" = 1 December 2026 = 2026-12-01 (NOT January 12)\nThe first number is ALWAYS the day, second is ALWAYS the month. Year 2-digit: assume 20XX. Convert all dates to YYYY-MM-DD format. If year is missing assume ${new Date().getFullYear()}.` }
+            { type: 'text', text: `You are a receipt parser. Extract expense details and return ONLY valid JSON, no markdown, no extra text.\n\nAvailable categories: ${cats.join(', ')}\n\nReturn exactly:\n{\n  "amount": <final total as number or null>,\n  "merchant": "<short clean name or null>",\n  "date": "<YYYY-MM-DD or null>",\n  "category": "<from available categories only or null>"\n}\n\nUse null for anything you cannot determine. Amount = final total after tax/service charge.\n\nCRITICAL DATE RULE: This user is in Singapore (UTC+8). ALL dates must be interpreted as DD/MM/YY or DD/MM/YYYY format — NEVER as MM/DD format. Examples:\n- "8/9/26" = 8 September 2026 = 2026-09-08 (NOT August 9)\n- "07/08/2026" = 7 August 2026 = 2026-08-07 (NOT July 8)\n- "1/12/26" = 1 December 2026 = 2026-12-01 (NOT January 12)\nThe first number is ALWAYS the day, second is ALWAYS the month. Year 2-digit: assume 20XX. Convert all dates to YYYY-MM-DD format. Today's date is ${todayISO()}. If the year is missing assume ${new Date().getFullYear()}. Receipts are almost always from the last few weeks, so if the year you read is not ${new Date().getFullYear()}, look at the digits again (2026 and 2024 are easy to confuse) before answering.` }
           ]}]
         })
       });
@@ -700,10 +700,21 @@ async function handleReceiptImage(event) {
     } catch(e) { throw new Error('Could not read receipt — please fill in manually'); }
     if (parsed.amount && parsed.amount > 0) { amountInput.value = parsed.amount; amountDisplay.textContent = '$' + parseFloat(parsed.amount).toFixed(2); amountDisplay.classList.remove('placeholder'); }
     if (parsed.merchant) { const mi = document.getElementById('merchant'); mi.value = parsed.merchant; mi.classList.add('ai-filled'); onMerchantInput(); }
-    if (parsed.date) { const di = document.getElementById('date'); di.value = parsed.date; di.classList.add('ai-filled'); updateDateDisplay(); }
+    let dateNote = '';
+    if (parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) {
+      let dv = parsed.date;
+      const diff = dayDiff(dv);
+      if (diff > 1 || diff < -45) {
+        const fixed = String(new Date().getFullYear()) + dv.slice(4);
+        const fd = dayDiff(fixed);
+        if (fd <= 1 && fd >= -45) { dateNote = `Receipt year read as ${dv.slice(0,4)}, set to ${new Date().getFullYear()}. Check the date.`; dv = fixed; }
+        else { dateNote = `Date reads ${dv}. Check it.`; }
+      }
+      const di = document.getElementById('date'); di.value = dv; di.classList.add('ai-filled'); updateDateDisplay();
+    }
     if (parsed.category && cats.includes(parsed.category)) { selectedCat = parsed.category; renderCatGrid(); }
     document.getElementById('scan-overlay').classList.remove('open');
-    showToast('✓ Receipt scanned — please review and save');
+    showToast(dateNote ? '⚠ ' + dateNote : '✓ Receipt scanned — please review and save');
   } catch(err) {
     document.getElementById('scan-overlay').classList.remove('open');
     showToast(err.message || 'Scan failed — please fill in manually');
@@ -843,6 +854,12 @@ function updateDateDisplay() {
   const val = document.getElementById('date').value;
   document.getElementById('date-display-text').textContent = formatDateDisplay(val);
 }
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function dayDiff(iso) { return Math.round((new Date(iso + 'T00:00:00') - new Date(todayISO() + 'T00:00:00')) / 86400000); }
+let dateConfirmed = null; // date string the user has confirmed as unusual
 function setToday() {
   const d = new Date();
   const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -878,6 +895,14 @@ async function saveExpense() {
   if (!merchant) { showToast('Please enter a merchant'); return; }
   if (!date) { showToast('Please select a date'); return; }
   if (!selectedCat) { showToast('Please select a category'); return; }
+  if (!editingId) {
+    const dd = dayDiff(date);
+    if ((dd > 1 || dd < -60) && dateConfirmed !== date) {
+      dateConfirmed = date;
+      showToast(`Date is ${date}. Tap Save again if that is right`);
+      return;
+    }
+  }
 
   setSyncStatus('syncing', 'Saving...');
   document.getElementById('save-btn').disabled = true;
@@ -1109,7 +1134,7 @@ function copySummary() {
 }
 
 // ── INIT ──────────────────────────────────────────────────────
-const APP_VERSION = 'v2026-11-17 · wallet-form';
+const APP_VERSION = 'v2026-11-20 · date-check';
 document.getElementById('app-version').textContent = APP_VERSION;
 setToday();
 renderCatGrid();
